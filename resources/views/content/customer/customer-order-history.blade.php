@@ -59,9 +59,11 @@
                                 $totalOrders - (($orders->currentPage() - 1) * $orders->perPage() + $loop->index);
 
                             // Payment display text & style
-                            $paymentStatus = $order->paymentDetails->payment_status ?? 'Pending';
+                            // Payment display text & style (paymentDetails is a collection; use first())
+                            $pd = optional($order->paymentDetails->first());
+                            $paymentStatus = $pd->payment_status ?? 'Pending';
                             $paymentMethodName =
-                                $order->paymentDetails->paymentMethod->method_name ??
+                                optional($pd->paymentMethod)->method_name ??
                                 ($order->paymentMethod->method_name ?? null);
 
                             // small helper to show "Paid via" text when appropriate
@@ -98,10 +100,11 @@
                                                 $totalOrders -
                                                 (($orders->currentPage() - 1) * $orders->perPage() + $loop->index);
 
-                                            // Payment display text & style
-                                            $paymentStatus = $order->paymentDetails->payment_status ?? 'Pending';
+                                            // Payment display text & style (paymentDetails is a collection; use first())
+                                            $pd = optional($order->paymentDetails->first());
+                                            $paymentStatus = $pd->payment_status ?? 'Pending';
                                             $paymentMethodName =
-                                                $order->paymentDetails->paymentMethod->method_name ??
+                                                optional($pd->paymentMethod)->method_name ??
                                                 ($order->paymentMethod->method_name ?? null);
 
                                             // small helper to show "Paid via" text when appropriate

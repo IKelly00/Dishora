@@ -68,19 +68,19 @@ class OrdersController extends Controller
         $order->order_status = $statuses->first() ?? 'Pending';
       }
 
-      // ✅ Determine order type
+      // Determine order type
       $isPreorder = $order->items->contains(fn($it) => (int)($it->is_pre_order ?? 0) === 1)
         || (!empty($order->preorderDetail));
 
       $order->order_type = $isPreorder ? 'Preorder' : 'Order';
 
-      // ✅ Combined label — e.g. "Pending Preorder"
+      // Combined label — e.g. "Pending Preorder"
       $order->order_status_label = "{$order->order_status} {$order->order_type}";
 
-      // ✅ Are ALL items still Pending?
+      // Are ALL items still Pending?
       $order->all_pending = $order->items->every(fn($it) => trim($it->order_item_status ?? '') === 'Pending');
 
-      // ✅ Check Preorders (receipt logic applies only for Preorders)
+      // Check Preorders (receipt logic applies only for Preorders)
       if ($isPreorder) {
         $businessId = $order->business_id;
 
