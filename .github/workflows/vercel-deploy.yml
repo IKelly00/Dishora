@@ -1,0 +1,51 @@
+name: Build & Deploy to Vercel
+
+on:
+  push:
+    branches:
+      - master   # change to your deployment branch if needed
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.2 + Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+
+      - name: Show PHP & Composer versions
+        run: |
+          php -v
+          composer --version
+
+      - name: Install Composer dependencies and run vercel-build
+        run: |
+          composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+          php artisan key:generate --force || true
+          php -r "@mkdir('bootstrap/cache', 0775, true);"
+          composer vercel-build
+        env:
+          COMPOSER_HOME: ${{ github.workspace }}/.composer
+
+      - name: Install Node (for Vercel CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # Optionally set these if required:
+          # VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          # VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          # deploy the built repo to the linked Vercel project
+          npx vercel --prod --confirm --token $VERCEL_TOKEN

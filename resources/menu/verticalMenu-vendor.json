@@ -1,0 +1,55 @@
+{
+  "menu": [
+    {
+      "url": "/vendor/dashboard",
+      "name": "Dashboard",
+      "icon": "menu-icon tf-icons ri-home-smile-line",
+      "slug": "vendor.dashboard"
+    },
+    {
+      "url": "vendor/messages",
+      "name": "Messages",
+      "icon": "menu-icon tf-icons ri-mail-open-line",
+      "slug": "vendor.messages"
+    },
+    {
+      "url": "/vendor/orders",
+      "name": "Manage Order",
+      "icon": "menu-icon tf-icons ri-clipboard-line",
+      "slug": "vendor-orders",
+      "submenu": [
+        {
+          "url": "/vendor/orders/preorder",
+          "name": "Pre-order",
+          "slug": "vendor.orders-preorder"
+        },
+        {
+          "url": "/vendor/orders/cart",
+          "name": "Active Order",
+          "slug": "vendor.orders-cart"
+        }
+      ]
+    },
+    {
+      "url": "/vendor/menu",
+      "name": "Menu",
+      "icon": "menu-icon tf-icons ri-file-list-3-line",
+      "slug": "vendor.menu"
+    },
+    {
+      "url": "/vendor/schedule",
+      "name": "Schedule",
+      "icon": "menu-icon tf-icons ri-calendar-event-line",
+      "slug": "vendor.schedule.index"
+    },
+    {
+      "menuHeader": "Other"
+    },
+    {
+      "url": "/vendor/feedback",
+      "name": "Feedback",
+      "icon": "menu-icon tf-icons ri-chat-1-line",
+      "slug": "vvendor.feedback.index"
+    }
+  ]
+}

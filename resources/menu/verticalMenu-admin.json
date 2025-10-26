@@ -1,0 +1,43 @@
+{
+  "menu": [
+    {
+      "url": "/admin/dashboard",
+      "name": "Dashboard",
+      "icon": "menu-icon tf-icons ri-home-smile-line",
+      "slug": "admin-dashboard"
+    },
+    {
+      "url": "/admin/inbox",
+      "name": "Inbox",
+      "icon": "menu-icon tf-icons ri-mail-open-line",
+      "slug": "admin-inbox"
+    },
+    {
+      "url": "/admin/promotion",
+      "name": "Promotion",
+      "icon": "menu-icon tf-icons ri-megaphone-line",
+      "slug": "admin-promotion"
+    },
+    {
+      "url": "/admin/manage-admins",
+      "name": "Manage Admin",
+      "icon": "menu-icon tf-icons ri-admin-line",
+      "slug": "admin-manage-admins"
+    },
+    {
+      "url": "/admin/manage-users",
+      "name": "Manage Users",
+      "icon": "menu-icon tf-icons ri-user-settings-line",
+      "slug": "admin-manage-users"
+    },
+    {
+      "menuHeader": "Other"
+    },
+    {
+      "url": "/admin/contact",
+      "name": "Contact",
+      "icon": "menu-icon tf-icons ri-contacts-line",
+      "slug": "admin-contact"
+    }
+  ]
+}

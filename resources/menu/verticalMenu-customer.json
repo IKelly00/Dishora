@@ -1,0 +1,55 @@
+{
+  "menu": [
+    {
+      "url": "/customer/dashboard",
+      "name": "Dashboards",
+      "icon": "menu-icon tf-icons ri-home-smile-line",
+      "slug": "customer.dashboard"
+    },
+    {
+      "url": "/customer/messages",
+      "name": "Messages",
+      "icon": "menu-icon tf-icons ri-mail-open-line",
+      "slug": "customer.messages"
+    },
+    {
+      "url": "/customer/cart",
+      "name": "Cart",
+      "icon": "menu-icon tf-icons ri-shopping-cart-line",
+      "slug": "customer.cart"
+    },
+    {
+      "url": "/customer/preorder",
+      "name": "Pre-Order",
+      "icon": "menu-icon tf-icons ri-calendar-event-line",
+      "slug": "customer.preorder"
+    },
+    {
+      "url": "/customer/orders",
+      "name": "Orders",
+      "icon": "menu-icon tf-icons ri-shopping-bag-3-line",
+      "slug": "customer.orders.index"
+    },
+    {
+      "url": "/customer/order-history",
+      "name": "Order History",
+      "icon": "menu-icon tf-icons ri-calendar-event-line",
+      "slug": "customer.orderhist.index"
+    },
+    {
+      "url": "/customer/vendors",
+      "name": "Vendors",
+      "icon": "menu-icon tf-icons ri-store-line",
+      "slug": "customer.vendors"
+    },
+    {
+      "menuHeader": "Other"
+    },
+    {
+      "url": "/customer/start-selling",
+      "name": "Start Selling",
+      "icon": "menu-icon tf-icons ri-store-2-line",
+      "slug": "customer.start.selling"
+    }
+  ]
+}
