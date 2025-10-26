@@ -112,6 +112,7 @@ class CartController extends Controller
     ]);
   }
 
+
   public function showCart()
   {
     $data['cart'] = session()->get('cart', []);
@@ -125,14 +126,44 @@ class CartController extends Controller
     // Fetch products
     $data['products'] = Product::whereIn('product_id', $productIds)->get()->keyBy('product_id');
 
-    /* Log::info('=== showCart() Debug ===', [
-      'cart_session'   => $data['cart'],                // raw cart from session
-      'product_ids'    => $productIds,                  // IDs we’re about to query
-      'products_found' => $data['products']->toArray(), // what the DB returned
-      'total_quantity' => $data['totalQuantity'],
-      'total_price'    => $data['totalPrice'],
-    ]); */
+    // --- START: New Logic for Business Hours ---
 
+    // Get Business IDs from fetched products
+    $businessIds = $data['products']->pluck('business_id')->unique()->values();
+
+    // Fetch opening hours for all businesses in cart
+    // Using the namespace from your checkout controller
+    $data['openingHours'] = \App\Models\BusinessOpeningHour::whereIn('business_id', $businessIds)
+      ->get()
+      ->groupBy('business_id'); // Group by business_id for easy lookup in Blade
+
+    // Set timezone and get current day/time
+    // (Ideally, this timezone is set in config/app.php)
+    date_default_timezone_set('Asia/Manila');
+
+    // THE FIX: Use date('l') to get "Monday", "Tuesday", etc. to match your DB
+    $data['currentDay'] = date('l');
+
+    $data['currentTime'] = date('H:i:s'); // e.g., '14:30:00'
+
+    // --- END: New Logic for Business Hours ---
+
+
+    // --- START: Debug Logging Block ---
+    // (This will write to storage/logs/laravel.log)
+    Log::info('=== showCart() Debug ===', [
+      'cart_session'   => $data['cart'],
+      'product_ids'    => $productIds,
+      'products_found' => $data['products']->keyBy('product_id')->toArray(),
+      // --- NEW LOGS ---
+      'opening_hours'  => $data['openingHours']->toArray(),
+      'current_day'    => $data['currentDay'],
+      'current_time'   => $data['currentTime'],
+    ]);
+    // --- END: Debug Logging Block ---
+
+
+    // These methods were in your original code
     $vendor   = $this->getVendor();
     $viewData = $this->buildViewData($vendor, $data);
 

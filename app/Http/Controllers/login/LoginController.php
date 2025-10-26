@@ -15,31 +15,61 @@ class LoginController extends Controller
 {
   public function loginForm(Request $request)
   {
-    Log::info('Cart contents', ['cart' => session('cart')]);
+    Log::info('Login form triggered. Checking session...', [
+      'cart' => session('cart'),
+      'active_role' => session('active_role')
+    ]);
 
-    Log::info('Login form active role:', ['active_role' => session('active_role')]);
-
-    // session()->forget('active_role');
-    // session()->forget('vendor_status_modal_shown');
-
-    // Save both cart + preorder back into OrderSession.orders
+    // 1. Get cart/preorder data from the session
     $orders = [
       'cart' => session('cart', []),
       'preorder' => session('preorder', []),
     ];
 
+    // 2. Get current user ID and session ID *before* logging out
+    $userId = Auth::id();
+    $sessionId = $request->session()->getId();
+
+    // 3. Save cart to DB only if it's not empty
     if (!empty($orders['cart']) || !empty($orders['preorder'])) {
-      OrderSession::updateOrCreate(
-        ['user_id' => Auth::id() ?? null, 'session_id' => session()->getId()],
-        ['orders' => $orders]
-      );
+
+      if ($userId) {
+        // User is authenticated. Save the cart against their user_id.
+        // This allows retrieving it when they log in again.
+        OrderSession::updateOrCreate(
+          ['user_id' => $userId], // Find by user_id
+          ['orders' => $orders, 'session_id' => $sessionId] // Update orders
+        );
+      } else {
+        // User is a guest. Save the cart against their session_id.
+        // You will need separate logic on login to merge this cart.
+        OrderSession::updateOrCreate(
+          ['session_id' => $sessionId], // Find by session_id
+          ['orders' => $orders, 'user_id' => null] // Update orders
+        );
+      }
     }
 
-    Auth::logout();
-    session()->forget('active_role');
-    session()->forget('vendor_status_modal_shown');
+    // 4. Perform a full logout and session invalidation
+    // This is the "session refresh" you wanted.
 
-    return view('content.login.login');
+    // Logs the user out of the application guard
+    Auth::logout();
+
+    // Invalidates the user's session, clearing all data (cart, active_role, etc.)
+    $request->session()->invalidate();
+
+    // Regenerates the CSRF token for the new guest session
+    $request->session()->regenerateToken();
+
+    // 5. Return the login view with "no-cache" headers
+    // This prevents the browser from caching authenticated pages.
+
+    $response = response()->view('content.login.login');
+
+    return $response->header('Cache-Control', 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0')
+      ->header('Pragma', 'no-cache')
+      ->header('Expires', 'Sat, 01 Jan 2000 00:00:00 GMT');
   }
 
   public function login(Request $request)

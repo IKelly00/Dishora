@@ -4,6 +4,8 @@
 
 @section('content')
 
+    text
+
     <script src="https://js.pusher.com/7.2/pusher.min.js"></script>
 
     <div class="container py-4">
@@ -277,6 +279,44 @@
         </div>
     </div>
 
+    <!-- Add/Preorder Success Modal (NEW: used instead of alert) -->
+    <div class="modal fade" id="productAddedModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content rounded-3 shadow border-0">
+
+                <!-- Modal Header -->
+                <div class="modal-header border-0 bg-white">
+                    <h6 class="modal-title fw-bold text-dark">Success</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body text-center p-4">
+                    <!-- Animated Success Check -->
+                    <div id="check-animation"
+                        class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
+                        style="width:80px; height:80px; background:#fff8eb;">
+                        <svg class="checkmark" viewBox="0 0 52 52">
+                            <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
+                            <path class="checkmark__check" fill="none" d="M14 27l7 7 16-16" />
+                        </svg>
+                    </div>
+
+                    <!-- Dynamic success message -->
+                    <div id="product-added-message" class="mb-3 fw-semibold text-dark small"></div>
+
+                    <a href="{{ route('customer.cart') }}" id="goCartBtn"
+                        class="btn btn-sm w-100 mb-2 btn-primary d-none">
+                        Go to Cart
+                    </a>
+                    <a href="{{ route('customer.preorder') }}" id="goPreorderBtn"
+                        class="btn btn-sm w-100 mb-2 btn-primary d-none">
+                        Go to Pre-orders
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom Styles -->
     <style>
         .main-content-area {
@@ -480,6 +520,49 @@
                 height: 120px;
             }
         }
+
+        /* Checkmark animation styles used by modal */
+        .checkmark {
+            width: 50px;
+            height: 50px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            display: block;
+        }
+
+        .checkmark__circle {
+            stroke: #f59e0b;
+            stroke-dasharray: 166;
+            stroke-dashoffset: 166;
+            stroke-width: 4;
+        }
+
+        .checkmark__check {
+            stroke: #f59e0b;
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+            stroke-width: 6;
+        }
+
+        .animate .checkmark__circle {
+            animation: circle 0.6s ease-out forwards;
+        }
+
+        .animate .checkmark__check {
+            animation: check 0.3s ease-out 0.6s forwards;
+        }
+
+        @keyframes circle {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        @keyframes check {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
     </style>
 
     @push('page-script')
@@ -524,7 +607,8 @@
                         const qty = parseInt(this.dataset.qty || 1, 10);
 
                         let url = '';
-                        if (this.classList.contains('preorder')) {
+                        const isPreorder = this.classList.contains('preorder');
+                        if (isPreorder) {
                             url = '{{ route('preorder.add') }}';
                         } else {
                             url = '{{ route('cart.add') }}';
@@ -547,16 +631,41 @@
                                 const contentType = res.headers.get('content-type');
                                 if (contentType && contentType.includes('application/json')) {
                                     const data = await res.json();
-                                    alert(
-                                        `${data.product_name} (x${data.quantity}) added to ${url.includes('preorder') ? 'preorder list' : 'cart'}`
-                                    );
+
+                                    // --- Instead of alert, show modal ---
+                                    const msgEl = document.getElementById(
+                                        'product-added-message');
+                                    msgEl.textContent =
+                                        `${data.product_name} (x${data.quantity}) added to ${isPreorder ? 'Pre-orders' : 'Cart'}`;
+
+                                    // Show/hide the appropriate go buttons
+                                    document.getElementById('goCartBtn').classList.toggle(
+                                        'd-none', isPreorder);
+                                    document.getElementById('goPreorderBtn').classList.toggle(
+                                        'd-none', !isPreorder);
+
+                                    // animate check
+                                    const checkWrapper = document.getElementById(
+                                        'check-animation');
+                                    checkWrapper.classList.remove('animate');
+                                    void checkWrapper.offsetWidth; // force reflow
+                                    checkWrapper.classList.add('animate');
+
+                                    // show modal
+                                    const modal = new bootstrap.Modal(document.getElementById(
+                                        'productAddedModal'));
+                                    modal.show();
                                 } else {
                                     const text = await res.text();
                                     console.error('Unexpected response:', text);
+                                    // Fallback: show simple browser alert if response isn't json
                                     alert('Something went wrong. Please try again.');
                                 }
                             })
-                            .catch(err => console.error(err));
+                            .catch(err => {
+                                console.error(err);
+                                alert('Failed to add item. Please try again.');
+                            });
                     });
                 });
 
@@ -598,27 +707,27 @@
                 function renderFeedbackList(reviews) {
                     if (!reviews.length) {
                         feedbackList.innerHTML = `
-                                <div class="empty-feedback-state text-center p-5 rounded-4 border bg-white shadow-sm">
-                                  <div class="mb-2">
-                                    <i class='bx bxs-message-rounded-dots text-warning' style="font-size: 2rem;"></i>
-                                  </div>
-                                  <h6 class="fw-semibold text-dark mb-1">No Feedback Yet</h6>
-                                  <p class="text-muted mb-0">Be the first to share your thoughts about this business!</p>
-                                </div>
-                              `;
+                            <div class="empty-feedback-state text-center p-5 rounded-4 border bg-white shadow-sm">
+                              <div class="mb-2">
+                                <i class='bx bxs-message-rounded-dots text-warning' style="font-size: 2rem;"></i>
+                              </div>
+                              <h6 class="fw-semibold text-dark mb-1">No Feedback Yet</h6>
+                              <p class="text-muted mb-0">Be the first to share your thoughts about this business!</p>
+                            </div>
+                          `;
                         return;
                     }
 
                     feedbackList.innerHTML = reviews.map(r => `
-                        <div class="feedback-item p-3 mb-3 bg-white border rounded-3 shadow-sm">
-                          <div class="d-flex justify-content-between align-items-center mb-1">
-                            <strong>${r.customer?.user?.fullname ?? 'Anonymous'}</strong>
-                            <span class="text-warning small">${'⭐'.repeat(r.rating)}</span>
-                          </div>
-                          <p class="mb-1 text-secondary">${r.comment || ''}</p>
-                          <small class="text-muted">${new Date(r.created_at).toLocaleString()}</small>
-                        </div>
-                      `).join('');
+                    <div class="feedback-item p-3 mb-3 bg-white border rounded-3 shadow-sm">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <strong>${r.customer?.user?.fullname ?? 'Anonymous'}</strong>
+                        <span class="text-warning small">${'⭐'.repeat(r.rating)}</span>
+                      </div>
+                      <p class="mb-1 text-secondary">${r.comment || ''}</p>
+                      <small class="text-muted">${new Date(r.created_at).toLocaleString()}</small>
+                    </div>
+                  `).join('');
                 }
 
 
@@ -652,7 +761,6 @@
 
                     if (response.ok) {
                         const data = await response.json();
-                        //alert(data.message);
 
                         // Reset and hide modal
                         feedbackForm.reset();
@@ -698,14 +806,14 @@
                     }
 
                     const messageHtml = `
-                <div class="message-wrapper ${alignClass} mb-2" data-message-id="${message.message_id || ''}">
-                    <small class="text-muted d-block">${senderName}</small>
-                    <div class="message p-2 px-3 rounded d-inline-block"
-                         style="background-color: ${messageBgColor}; max-width: 80%; text-align: left; word-wrap: break-word;">
-                        ${message.message_text}
-                    </div>
+            <div class="message-wrapper ${alignClass} mb-2" data-message-id="${message.message_id || ''}">
+                <small class="text-muted d-block">${senderName}</small>
+                <div class="message p-2 px-3 rounded d-inline-block"
+                     style="background-color: ${messageBgColor}; max-width: 80%; text-align: left; word-wrap: break-word;">
+                    ${message.message_text}
                 </div>
-            `;
+            </div>
+        `;
                     // Use jQuery to append since the rest of the script uses it
                     $('#chat-box').append(messageHtml);
                 }

@@ -76,130 +76,216 @@
                             $businessTotal = 0;
                         @endphp
 
+                        @php
+                            // Determine business object (if available) from first item
+                            $first = $items->first();
+                            $business = $first && $first->product ? $first->product->business ?? null : null;
+                            $businessTotal = 0;
+                        @endphp
+
+                        {{-- ... inside @foreach ($grouped as $businessId => $items) ... --}}
+
+                        @php
+                            $isBusinessOpen = false;
+                            $tooltipMessage = 'This business is currently closed.';
+
+                            if (
+                                isset($openingHours) &&
+                                isset($currentDay) &&
+                                isset($currentTime) &&
+                                $businessId !== 'unknown'
+                            ) {
+                                $hoursToday = $openingHours->get($businessId)?->firstWhere('day_of_week', $currentDay);
+
+                                // --- START: This is the FIX ---
+                                // Changed !$hoursToday->is_closed to (bool)$hoursToday->is_closed === false
+                                // This is safer for checking values like "0", 0, or false.
+                                if (
+                                    $hoursToday &&
+                                    (bool) $hoursToday->is_closed === false &&
+                                    $hoursToday->opens_at &&
+                                    $hoursToday->closes_at
+                                ) {
+                                    // --- END: This is the FIX ---
+
+                                    // Also, let's trim the time values just to be safe, like in your checkout controller
+        $opens_at = substr($hoursToday->opens_at, 0, 8); // "09:00:00"
+        $closes_at = substr($hoursToday->closes_at, 0, 8); // "17:00:00"
+
+        if ($currentTime >= $opens_at && $currentTime <= $closes_at) {
+            $isBusinessOpen = true;
+        } elseif ($currentTime < $opens_at) {
+            $tooltipMessage = 'This business has not opened yet.';
+        } else {
+            $tooltipMessage = 'This business is already closed for the day.';
+                                    }
+                                }
+                            }
+                        @endphp
+
+
                         <div class="col-12">
                             <div class="card shadow-sm border-0 rounded-4 order-card">
+                                {{-- ... (rest of your card) ... --}}
 
-                                <!-- Business Header -->
-                                <div
-                                    class="card-header bg-white border-0 d-flex justify-content-between align-items-center p-4 rounded-top-4">
-                                    <div>
-                                        <h5 class="mb-0 fw-bolder">{{ $business->business_name ?? 'Unknown Vendor' }}</h5>
-                                        @if ($business && $business->address)
-                                            <small class="text-muted">{{ $business->address }}</small>
-                                        @endif
-                                    </div>
-                                    <span class="badge bg-secondary-subtle text-dark ms-2 fs-6">Cart</span>
-                                </div>
 
-                                <!-- Items Table -->
-                                <div class="card-body p-4">
-                                    <div class="table-responsive">
-                                        <table class="table table-borderless align-middle mb-0">
-                                            <thead class="bg-light">
-                                                <tr>
-                                                    <th class="px-4 py-3" style="width: 50%;">Product</th>
-                                                    <th class="text-center px-4 py-3">Quantity</th>
-                                                    <th class="text-end px-4 py-3">Price</th>
-                                                    <th class="text-end px-4 py-3">Subtotal</th>
-                                                    <th class="text-center px-4 py-3">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach ($items as $entry)
-                                                    @php
-                                                        $product = $entry->product;
-                                                        $isUnavailable = !$product || !($product->is_available ?? true);
-                                                        $price = $isUnavailable ? 0 : $product->price ?? 0;
-                                                        $subtotal = $isUnavailable ? 0 : $price * $entry->quantity;
-                                                        if (!$isUnavailable) {
-                                                            $businessTotal += $subtotal;
-                                                        }
-                                                    @endphp
-                                                    <tr class="product-row" data-product-id="{{ $entry->product_id }}">
-                                                        <td class="px-4 py-3">
-                                                            <div class="d-flex align-items-center">
-                                                                <img src="{{ $product && $product->image_url ? secure_asset($product->image_url) : secure_asset('images/no-image.jpg') }}"
-                                                                    alt="{{ $product->item_name ?? 'No image' }}"
-                                                                    class="rounded me-3"
-                                                                    style="width: 60px; height: 60px; object-fit: cover;">
-                                                                <div>
-                                                                    <span
-                                                                        class="fw-semibold">{{ $product->item_name ?? 'Product #' . $entry->product_id }}</span>
-                                                                    @if ($isUnavailable)
-                                                                        <br><span
-                                                                            class="badge bg-danger-subtle text-danger">Unavailable</span>
-                                                                    @else
-                                                                        @if (!empty($product->variation_name))
-                                                                            <div class="text-muted small">
-                                                                                {{ $product->variation_name }}</div>
-                                                                        @endif
-                                                                    @endif
-                                                                </div>
-                                                            </div>
-                                                        </td>
+                                <div class="col-12">
+                                    <div class="card shadow-sm border-0 rounded-4 order-card">
+                                        {{-- ... (rest of your card header and table) ... --}}
 
-                                                        <td class="text-center px-4 py-3">
-                                                            @if (!$isUnavailable)
-                                                                <div
-                                                                    class="d-inline-flex justify-content-center align-items-center gap-2 qty-box">
-                                                                    <button class="btn-qty decrease"
-                                                                        data-id="{{ $entry->product_id }}">-</button>
-                                                                    <span class="px-2 quantity"
-                                                                        data-id="{{ $entry->product_id }}">{{ $entry->quantity }}</span>
-                                                                    <button class="btn-qty increase"
-                                                                        data-id="{{ $entry->product_id }}">+</button>
-                                                                </div>
-                                                            @else
-                                                                -
-                                                            @endif
-                                                        </td>
+                                        <div class="col-12">
+                                            <div class="card shadow-sm border-0 rounded-4 order-card">
 
-                                                        <td class="text-end px-4 py-3 price"
-                                                            data-price="{{ $price }}">
-                                                            ₱{{ number_format($price, 2) }}
-                                                        </td>
+                                                <!-- Business Header -->
+                                                <div
+                                                    class="card-header bg-white border-0 d-flex justify-content-between align-items-center p-4 rounded-top-4">
+                                                    <div>
+                                                        <h5 class="mb-0 fw-bolder">
+                                                            {{ $business->business_name ?? 'Unknown Vendor' }}</h5>
+                                                        @if ($business && $business->address)
+                                                            <small class="text-muted">{{ $business->address }}</small>
+                                                        @endif
+                                                    </div>
+                                                    <span class="badge bg-secondary-subtle text-dark ms-2 fs-6">Cart</span>
+                                                </div>
 
-                                                        <td class="text-end px-4 py-3 fw-bold subtotal">
-                                                            ₱{{ number_format($subtotal, 2) }}
-                                                        </td>
+                                                <!-- Items Table -->
+                                                <div class="card-body p-4">
+                                                    <div class="table-responsive">
+                                                        <table class="table table-borderless align-middle mb-0">
+                                                            <thead class="bg-light">
+                                                                <tr>
+                                                                    <th class="px-4 py-3" style="width: 50%;">Product</th>
+                                                                    <th class="text-center px-4 py-3">Quantity</th>
+                                                                    <th class="text-end px-4 py-3">Price</th>
+                                                                    <th class="text-end px-4 py-3">Subtotal</th>
+                                                                    <th class="text-center px-4 py-3">Action</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach ($items as $entry)
+                                                                    @php
+                                                                        $product = $entry->product;
+                                                                        $isUnavailable =
+                                                                            !$product ||
+                                                                            !($product->is_available ?? true);
+                                                                        $price = $isUnavailable
+                                                                            ? 0
+                                                                            : $product->price ?? 0;
+                                                                        $subtotal = $isUnavailable
+                                                                            ? 0
+                                                                            : $price * $entry->quantity;
+                                                                        if (!$isUnavailable) {
+                                                                            $businessTotal += $subtotal;
+                                                                        }
+                                                                    @endphp
+                                                                    <tr class="product-row"
+                                                                        data-product-id="{{ $entry->product_id }}">
+                                                                        <td class="px-4 py-3">
+                                                                            <div class="d-flex align-items-center">
+                                                                                <img src="{{ $product && $product->image_url ? secure_asset($product->image_url) : secure_asset('images/no-image.jpg') }}"
+                                                                                    alt="{{ $product->item_name ?? 'No image' }}"
+                                                                                    class="rounded me-3"
+                                                                                    style="width: 60px; height: 60px; object-fit: cover;">
+                                                                                <div>
+                                                                                    <span
+                                                                                        class="fw-semibold">{{ $product->item_name ?? 'Product #' . $entry->product_id }}</span>
+                                                                                    @if ($isUnavailable)
+                                                                                        <br><span
+                                                                                            class="badge bg-danger-subtle text-danger">Unavailable</span>
+                                                                                    @else
+                                                                                        @if (!empty($product->variation_name))
+                                                                                            <div class="text-muted small">
+                                                                                                {{ $product->variation_name }}
+                                                                                            </div>
+                                                                                        @endif
+                                                                                    @endif
+                                                                                </div>
+                                                                            </div>
+                                                                        </td>
 
-                                                        <td class="text-center px-4 py-3">
-                                                            <form action="{{ route('cart.remove') }}" method="POST"
-                                                                onsubmit="return confirm('Remove this item?')">
-                                                                @csrf
-                                                                <input type="hidden" name="product_id"
-                                                                    value="{{ $entry->product_id }}">
-                                                                <input type="hidden" name="type" value="cart">
-                                                                <button type="submit"
-                                                                    class="btn btn-sm btn-outline-danger btn-icon">
-                                                                    <i class="ri-delete-bin-line"></i>
-                                                                </button>
-                                                            </form>
-                                                        </td>
-                                                    </tr>
-                                                @endforeach
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
+                                                                        <td class="text-center px-4 py-3">
+                                                                            @if (!$isUnavailable)
+                                                                                <div
+                                                                                    class="d-inline-flex justify-content-center align-items-center gap-2 qty-box">
+                                                                                    <button class="btn-qty decrease"
+                                                                                        data-id="{{ $entry->product_id }}">-</button>
+                                                                                    <span class="px-2 quantity"
+                                                                                        data-id="{{ $entry->product_id }}">{{ $entry->quantity }}</span>
+                                                                                    <button class="btn-qty increase"
+                                                                                        data-id="{{ $entry->product_id }}">+</button>
+                                                                                </div>
+                                                                            @else
+                                                                                -
+                                                                            @endif
+                                                                        </td>
 
-                                <!-- Footer with Total and Checkout Button -->
-                                <div
-                                    class="card-footer bg-white border-top d-flex justify-content-end align-items-center p-4">
-                                    <div class="text-end">
-                                        <p class="mb-1 fw-semibold">Total:</p>
-                                        <h5 class="fw-bold text-primary mb-0 business-total">
-                                            ₱{{ number_format($businessTotal, 2) }}</h5>
-                                    </div>
+                                                                        <td class="text-end px-4 py-3 price"
+                                                                            data-price="{{ $price }}">
+                                                                            ₱{{ number_format($price, 2) }}
+                                                                        </td>
 
-                                    <a href="{{ route('checkout.proceed', ['business_id' => $businessId]) }}"
-                                        class="btn btn-primary ms-4">
-                                        Proceed to Checkout
-                                    </a>
-                                </div>
+                                                                        <td class="text-end px-4 py-3 fw-bold subtotal">
+                                                                            ₱{{ number_format($subtotal, 2) }}
+                                                                        </td>
 
-                            </div>
-                        </div>
+                                                                        <td class="text-center px-4 py-3">
+                                                                            <form action="{{ route('cart.remove') }}"
+                                                                                method="POST"
+                                                                                onsubmit="return confirm('Remove this item?')">
+                                                                                @csrf
+                                                                                <input type="hidden" name="product_id"
+                                                                                    value="{{ $entry->product_id }}">
+                                                                                <input type="hidden" name="type"
+                                                                                    value="cart">
+                                                                                <button type="submit"
+                                                                                    class="btn btn-sm btn-outline-danger btn-icon">
+                                                                                    <i class="ri-delete-bin-line"></i>
+                                                                                </button>
+                                                                            </form>
+                                                                        </td>
+                                                                    </tr>
+                                                                @endforeach
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Footer with Total and Checkout Button -->
+                                                <div
+                                                    class="card-footer bg-white border-top d-flex justify-content-end align-items-center p-4">
+                                                    <div class="text-end">
+                                                        <p class="mb-1 fw-semibold">Total:</p>
+                                                        <h5 class="fw-bold text-primary mb-0 business-total">
+                                                            ₱{{ number_format($businessTotal, 2) }}</h5>
+                                                    </div>
+
+                                                    {{-- --- START: Modified Button Logic --- --}}
+                                                    @if ($isBusinessOpen)
+                                                        <a href="{{ route('checkout.proceed', ['business_id' => $businessId]) }}"
+                                                            class="btn btn-primary ms-4">
+                                                            Proceed to Checkout
+                                                        </a>
+                                                    @else
+                                                        {{-- This span wrapper is needed for Bootstrap tooltips on disabled elements --}}
+                                                        <span class="d-inline-block ms-4" tabindex="0"
+                                                            data-bs-toggle="tooltip" data-bs-placement="top"
+                                                            title="{{ $tooltipMessage }}">
+                                                            <a href="#" class="btn btn-primary disabled"
+                                                                style="pointer-events: none;" {{-- Prevents clicks on the disabled link --}}
+                                                                aria-disabled="true" onclick="return false;">
+                                                                Proceed to Checkout
+                                                            </a>
+                                                        </span>
+                                                    @endif
+                                                    {{-- --- END: Modified Button Logic --- --}}
+
+                                                </div>
+
+                                                {{-- ... (rest of the file) ... --}}
+
+                                            </div>
+                                        </div>
                     @endforeach
                 </div>
             @endif
@@ -291,6 +377,12 @@
     {{-- JAVASCRIPT: cart update + totals per business (keeps same UX as preorder but hits cart routes) --}}
     <script>
         document.addEventListener("DOMContentLoaded", function() {
+
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+
             const updateBusinessCardTotals = (businessCard) => {
                 let businessTotal = 0;
                 businessCard.querySelectorAll('.product-row').forEach(productRow => {
