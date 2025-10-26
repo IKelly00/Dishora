@@ -29,6 +29,7 @@
         });
     </script>
 
+
     <div class="container py-5">
         <div class="main-content-area">
             <h4 class="fw-bold mb-4">My Orders</h4>
@@ -60,8 +61,8 @@
                         <div class="col-12 col-md-6">
                             <div class="card order-card shadow-sm border-0 rounded-4 overflow-hidden">
 
-                                {{-- Optional Preorder note --}}
-                                @if ($order->order_type === 'Preorder' && ($order->has_pending_in_session || $order->has_user_pending_preorders))
+                                {{-- FIX 1 --}}
+                                @if ($order->order_type === 'Preorder' && $order->needs_receipt)
                                     <div class="order-note d-flex gap-3 align-items-start p-3">
                                         <i class="ri-alert-line fs-4 text-warning me-1" style="line-height:1"></i>
                                         <div>
@@ -187,8 +188,10 @@
                                     <div class="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
                                         <div class="d-flex flex-column">
                                             <div class="d-flex gap-2 align-items-center">
-                                                @if ($order->order_type === 'Preorder' && ($order->has_pending_in_session || $order->has_user_pending_preorders))
-                                                    <a href="{{ route('checkout.preorder.proceed', ['business_id' => $order->business_id]) }}"
+
+                                                {{-- FIX 2 --}}
+                                                @if ($order->order_type === 'Preorder' && $order->needs_receipt)
+                                                    <a href="{{ route('preorder.receipt', ['order_id' => $order->order_id]) }}"
                                                         class="btn btn-upload btn-sm me-2">Upload Receipt</a>
                                                 @endif
 
@@ -203,8 +206,8 @@
                                                 @endif
                                             </div>
 
-                                            {{-- small helper text under action buttons --}}
-                                            @if ($order->order_type === 'Preorder' && ($order->has_pending_in_session || $order->has_user_pending_preorders))
+                                            {{-- FIX 3 --}}
+                                            @if ($order->order_type === 'Preorder' && $order->needs_receipt)
                                                 <div class="small text-muted mt-2">Upload the receipt to complete the
                                                     pre-order.</div>
                                             @endif

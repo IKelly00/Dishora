@@ -129,40 +129,11 @@
                                         <h5 class="fw-bold text-primary mb-0 business-total">
                                             ₱{{ number_format($businessTotal, 2) }}</h5>
                                     </div>
-                                    @php
-                                        // check session preorders for pending transaction for this business
-                                        $hasPendingInSession = collect(session('preorder', []))->contains(function (
-                                            $it,
-                                        ) use ($businessId) {
-                                            return isset($it['business_id']) &&
-                                                $it['business_id'] == $businessId &&
-                                                !empty($it['transaction_id']);
-                                        });
 
-                                        // check DB preorders linked to this business for this user that are awaiting receipt
-                                        $userPendingPreorders = \App\Models\PreOrder::whereHas('order', function (
-                                            $q,
-                                        ) use ($businessId) {
-                                            $q->where('user_id', Auth::user()->user_id)->where(
-                                                'business_id',
-                                                $businessId,
-                                            );
-                                        })
-                                            ->whereNull('receipt_url')
-                                            ->get();
-                                    @endphp
-
-                                    @if ($hasPendingInSession || $userPendingPreorders->isNotEmpty())
-                                        <a href="{{ route('checkout.preorder.proceed', ['business_id' => $businessId]) }}"
-                                            class="btn btn-warning ms-4">
-                                            Upload Receipt
-                                        </a>
-                                    @else
-                                        <a href="{{ route('checkout.preorder.proceed', ['business_id' => $businessId]) }}"
-                                            class="btn btn-primary ms-4">
-                                            Proceed to Checkout
-                                        </a>
-                                    @endif
+                                    <a href="{{ route('checkout.preorder.proceed', ['business_id' => $businessId]) }}"
+                                        class="btn btn-primary ms-4">
+                                        Proceed to Checkout
+                                    </a>
                                 </div>
 
                             </div>

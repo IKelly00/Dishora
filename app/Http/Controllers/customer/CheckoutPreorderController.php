@@ -33,107 +33,30 @@ class CheckoutPreorderController extends Controller
    */
   public function proceed($business_id)
   {
-
+    // --- Initial Setup (Get session items and product details) ---
     $allPreorders = collect(session('preorder', []));
-    if ($allPreorders->isEmpty()) {
-      return redirect()->route('customer.preorder')->with('error', 'Your preorder list is empty.');
-    }
-
-    // Get product details to filter by business
     $productIds = $allPreorders->pluck('product_id');
     $products = Product::with('business')->whereIn('product_id', $productIds)->get()->keyBy('product_id');
 
-    // Filter all session items that belong to the target business
+    // Filter session items for the specific business we are checking out
     $itemsForBusiness = $allPreorders->filter(function ($item) use ($business_id, $products) {
       return isset($products[$item['product_id']]) && $products[$item['product_id']]->business_id == $business_id;
     });
 
+    // --- STATE A: NORMAL CHECKOUT (No pending DB order found) ---
+
+    // Check if there are items for this business in the session
     if ($itemsForBusiness->isEmpty()) {
       return redirect()->route('customer.preorder')->with('error', 'No items found for this business.');
     }
 
-    // --- NEW LOGIC: Check for pending payments for this business ---
-    $pendingSessionItem = collect(session('preorder', []))
-      ->first(fn($it) => isset($it['business_id']) && $it['business_id'] == $business_id && !empty($it['transaction_id']));
+    Log::debug('Proceeding to normal checkout with session items.', [
+      'user_id' => Auth::id(),
+      'business_id' => $business_id
+    ]);
 
-
-    // try to find any preorders in DB for this user/business awaiting receipt
-    $userPendingPreorders = \App\Models\PreOrder::whereHas('order', function ($q) use ($business_id) {
-      $q->where('user_id', Auth::user()->user_id)
-        ->where('business_id', $business_id);
-    })->whereNull('receipt_url')->get();
-
-    // select transaction id: prefer session, else use first DB preorder's payment_transaction_id (if any)
-    $transactionId = null;
-
-    if ($pendingSessionItem) {
-      $transactionId = $pendingSessionItem['transaction_id'] ?? null;
-      Log::debug('Found pending transaction in session', ['transaction_id' => $transactionId, 'business_id' => $business_id]);
-    } elseif ($userPendingPreorders->isNotEmpty()) {
-      // take the most recent DB preorder that has a payment_transaction_id
-      $dbPreorderWithTx = $userPendingPreorders->first(fn($p) => !empty($p->payment_transaction_id));
-      if ($dbPreorderWithTx) {
-        $transactionId = $dbPreorderWithTx->payment_transaction_id;
-        Log::debug('Found pending transaction in DB PreOrder', ['transaction_id' => $transactionId, 'business_id' => $business_id]);
-      } else {
-        Log::debug('User pending preorders exist but none have a payment_transaction_id yet', ['business_id' => $business_id]);
-      }
-    }
-
-    if (!empty($transactionId)) {
-      // Find PaymentDetail (if webhook already created the payment+order)
-      $paymentDetail = PaymentDetail::where('transaction_id', $transactionId)
-        ->with('order.preorderDetail')
-        ->first();
-
-      // If we got a PaymentDetail + Order + PreOrder and the preorder still needs a receipt, show upload mode
-      if ($paymentDetail && $paymentDetail->order && $paymentDetail->order->preorderDetail) {
-        $preorder = $paymentDetail->order->preorderDetail;
-
-        // show upload_mode only if there's no receipt uploaded or preorder not confirmed
-        if (empty($preorder->receipt_url) && strtolower($preorder->preorder_status ?? '') !== 'Receipt Uploaded') {
-          $order = $paymentDetail->order;
-          $user = Auth::user();
-          if ($order->user_id != $user->user_id) abort(403);
-          return view('content.customer.customer-preorder-checkout', [
-            'upload_mode' => true,
-            'order' => $order,
-            'preorder' => $preorder,
-          ]);
-        }
-
-        // if preorder already confirmed, fall through to normal checkout below (we will show normal checkout)
-      } else {
-        // PaymentDetail or PreOrder not present yet (webhook may still be processing) or webhook failed.
-        Log::warning('No PaymentDetail or PreOrder found for transaction, cleaning up session.', [
-          'transaction_id' => $transactionId,
-          'user_id' => Auth::id()
-        ]);
-
-        // Remove stale transaction_id from session preorder items
-        $this->clearTransactionFromSession($transactionId);
-
-        // IMPORTANT: refresh session and recompute itemsForBusiness so subsequent logic sees the updated session
-        $allPreorders = collect(session('preorder', []));
-        $itemsForBusiness = $allPreorders->filter(function ($item) use ($business_id, $products) {
-          return isset($products[$item['product_id']]) && $products[$item['product_id']]->business_id == $business_id;
-        });
-
-        // If after cleanup nothing remains for this business, redirect with info
-        if ($itemsForBusiness->isEmpty()) {
-          return redirect()->route('customer.preorder')->with('info', 'You have items from this vendor that are pending receipt upload.');
-        }
-
-        // Fall through to normal checkout below with refreshed $itemsForBusiness
-      }
-    }
-
-    // -------------------------
-    // STATE A: NORMAL CHECKOUT
-    // -------------------------
-    $checkoutPreorder = $allPreorders->filter(function ($item) use ($business_id, $products) {
-      return isset($products[$item['product_id']]) && $products[$item['product_id']]->business_id == $business_id;
-    });
+    // Use the filtered session items for checkout calculations
+    $checkoutPreorder = $itemsForBusiness;
 
     // --- Compute totals ONLY for the items being checked out now ---
     $total = 0;
@@ -141,47 +64,51 @@ class CheckoutPreorderController extends Controller
     $advance_breakdown = [];
     $requires_advance = false;
 
-    $checkoutPreorder = $checkoutPreorder->map(function ($i) use ($products, &$total, &$totalAdvanceRequired, &$advance_breakdown, &$requires_advance) {
+    foreach ($checkoutPreorder as $i) {
+      if (!isset($products[$i['product_id']])) continue;
+
       $p = $products[$i['product_id']];
       $price  = (float) $p->price;
-      $advAmt = (float) $p->advance_amount;
+      $advAmt = (float) ($p->advance_amount ?? 0);
       $qty    = (int)   $i['quantity'];
 
       $total += $price * $qty;
-      $totalAdvanceRequired += $advAmt * $qty;
 
       if ($advAmt > 0) {
+        $currentAdvance = $advAmt * $qty;
+        $totalAdvanceRequired += $currentAdvance;
         $requires_advance = true;
-        $advance_breakdown[$p->item_name] = ['quantity' => $qty, 'advance_total' => $advAmt * $qty];
+        $advance_breakdown[$p->item_name] = ['quantity' => $qty, 'advance_total' => $currentAdvance];
       }
-
-      $i['price'] = $price;
-      $i['is_unavailable'] = !$p->is_available;
-      return $i;
-    })->filter(fn($i) => empty($i['is_unavailable']))->values();
-
-    if ($checkoutPreorder->isEmpty()) {
-      return redirect()->route('customer.preorder')->with('error', 'All remaining items for this business are unavailable.');
     }
 
+    // Filter out unavailable items after calculation
+    $checkoutPreorder = $checkoutPreorder->filter(function ($i) use ($products) {
+      return isset($products[$i['product_id']]) && $products[$i['product_id']]->is_available;
+    })->values();
+
+    if ($checkoutPreorder->isEmpty()) {
+      return redirect()->route('customer.preorder')->with('error', 'All items for this business are currently unavailable.');
+    }
+
+    // Fetch user, customer, vendors, opening hours (unchanged)
     $user = Auth::user();
     $customer = Customer::where('user_id', $user->user_id)->first();
     $vendors = BusinessDetail::with(['paymentMethods' => fn($q) => $q->where('status', 'active')])
       ->where('business_id', $business_id)->get()->keyBy('business_id');
 
-    // --- NEW: load opening hours for this business and transform for JS ----
     $opening = \App\Models\BusinessOpeningHour::where('business_id', $business_id)->get();
-
     $openingHours = [];
     foreach ($opening as $row) {
-      $key = strtolower($row->day_of_week); // monday, tuesday, ...
+      $key = strtolower($row->day_of_week);
       $openingHours[$key] = [
-        'opens_at'  => $row->opens_at ? substr($row->opens_at, 0, 8) : null,   // "08:00:00"
-        'closes_at' => $row->closes_at ? substr($row->closes_at, 0, 8) : null,  // "20:00:00"
+        'opens_at'  => $row->opens_at ? substr($row->opens_at, 0, 8) : null,
+        'closes_at' => $row->closes_at ? substr($row->closes_at, 0, 8) : null,
         'is_closed' => (bool) $row->is_closed,
       ];
     }
 
+    // --- Return the normal checkout view ---
     return view('content.customer.customer-preorder-checkout', [
       'upload_mode'            => false,
       'business_id'            => $business_id,
@@ -196,21 +123,27 @@ class CheckoutPreorderController extends Controller
       'advance_breakdown'      => $advance_breakdown,
       'requires_advance'       => $requires_advance,
       'openingHours'           => $openingHours,
+      'order'                  => null, // Required by Blade
+      'preorder'               => null, // Required by Blade
     ]);
   }
 
-
-  // ALSO, ADD THIS HELPER METHOD TO THE CLASS to handle data cleanup
+  // You still need the helper method for clearing transactions if called elsewhere,
+  // but the proceed() method no longer calls it directly in the main flow.
   private function clearTransactionFromSession($transactionId)
   {
+    if (!$transactionId) return;
+
     $currentPreorders = collect(session('preorder', []));
     $cleanedPreorders = $currentPreorders->map(function ($item) use ($transactionId) {
-      if (isset($item['transaction_id']) && $item['transaction_id'] === $transactionId) {
+      if (isset($item['transaction_id']) && $item['transaction_id'] == $transactionId) {
         unset($item['transaction_id']);
+        Log::debug('Cleared transaction_id from session item', ['product_id' => $item['product_id'] ?? null]);
       }
       return $item;
     })->all();
     session(['preorder' => $cleanedPreorders]);
+    Log::info('Attempted to clear transaction from session', ['transaction_id' => $transactionId]);
   }
 
   /**
@@ -916,6 +849,55 @@ class CheckoutPreorderController extends Controller
 
     return response()->json([
       'unavailable_dates' => $fullyBookedDates
+    ]);
+  }
+
+  public function uploadReceipt($order_id)
+  {
+    // Find latest PreOrder for this user/business that still needs a receipt
+    $pendingDbPreorder = PreOrder::whereHas('order', function ($q) use ($order_id) {
+      $q->where('user_id', Auth::id())
+        ->where('order_id', $order_id);
+    })
+      ->whereNull('receipt_url')
+      ->with('order.items.product') // eager load items and product (if relation exists)
+      ->latest('created_at')
+      ->first();
+
+    if (! $pendingDbPreorder) {
+      // No pending preorder that requires receipt upload
+      return redirect()->route('customer.preorder')
+        ->with('error', 'No pending pre-order found that requires receipt upload.');
+    }
+
+    $order = $pendingDbPreorder->order;
+
+    // Compute order total defensively (use stored item price if available, else product price)
+    $total = 0;
+    if ($order && $order->items) {
+      foreach ($order->items as $item) {
+        // Try to read price from the order item first (if you store it there),
+        // otherwise fall back to the related product price.
+        $price = null;
+        if (isset($item->price) && $item->price !== null) {
+          $price = (float) $item->price;
+        } elseif (isset($item->product) && isset($item->product->price)) {
+          $price = (float) $item->product->price;
+        } else {
+          $price = 0;
+        }
+
+        $qty = isset($item->quantity) ? (int) $item->quantity : 1;
+        $total += $price * $qty;
+      }
+    }
+
+    // Pass variables the blade expects:
+    return view('content.customer.customer-upload-receipt', [
+      'order'       => $order,
+      'preorder'    => $pendingDbPreorder,
+      'total'       => $total,
+      'order_id' => $order_id,
     ]);
   }
 

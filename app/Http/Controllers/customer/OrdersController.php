@@ -29,16 +29,14 @@ class OrdersController extends Controller
       'paymentDetails.paymentMethod',
       'paymentMethod',
       'paymentDetails',
-      'preorderDetail',
+      'preorderDetail', // This relation is used for the receipt check
     ])
       ->where('user_id', $user->user_id)
       ->whereHas('items', fn($q) => $q->where('order_item_status', '!=', 'Completed'))
       ->orderBy('created_at', 'desc')
       ->paginate(10);
 
-    $sessionPreorders = collect(session('preorder', []));
-
-    $orders->getCollection()->transform(function ($order) use ($user, $sessionPreorders) {
+    $orders->getCollection()->transform(function ($order) use ($user) {
       // ✅ Determine item-level statuses
       $statuses = $order->items->pluck('order_item_status')
         ->map(fn($s) => ucfirst(strtolower(trim((string)$s))))
@@ -82,32 +80,24 @@ class OrdersController extends Controller
 
       // Check Preorders (receipt logic applies only for Preorders)
       if ($isPreorder) {
-        $businessId = $order->business_id;
 
-        $order->has_pending_in_session = $sessionPreorders->contains(function ($it) use ($businessId) {
-          return isset($it['business_id']) && $it['business_id'] == $businessId && !empty($it['transaction_id']);
-        });
-
-        $order->has_user_pending_preorders = PreOrder::whereHas('order', function ($q) use ($user, $businessId) {
-          $q->where('user_id', $user->user_id)->where('business_id', $businessId);
-        })
-          ->whereNull('receipt_url') // only preorders missing receipt
-          ->exists();
+        // ✅ HERE IS THE FIX:
+        // Changed is_null() to empty() to catch both NULL and empty strings ''.
+        $order->needs_receipt = !empty($order->preorderDetail) && empty($order->preorderDetail->receipt_url);
       } else {
         // regular cart orders never have receipts
-        $order->has_pending_in_session = false;
-        $order->has_user_pending_preorders = false;
+        $order->needs_receipt = false;
       }
 
       return $order;
     });
+
 
     return view('content.customer.customer-orders', [
       'orders' => $orders,
       'totalOrders' => $totalOrders
     ]);
   }
-
 
   public function cancel(Request $request, $orderId)
   {

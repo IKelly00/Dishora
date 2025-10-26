@@ -9,348 +9,304 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
 
-    {{-- Keep FullCalendar styles loaded by CDN implicitly; flatpickr removed for delivery_time select approach --}}
-
-    @if (isset($upload_mode) && $upload_mode)
-        <div class="container py-4">
-            <div class="card col-md-8 mx-auto">
-                <div class="card-header text-center">
-                    <h4 class="card-title mb-0">Payment Successful!</h4>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-success d-flex align-items-center" role="alert">
-                        <i class='bx bx-check-circle bx-lg me-3'></i>
-                        <div>
-                            Your payment of <strong>₱{{ number_format($preorder->advance_paid_amount, 2) }}</strong> was
-                            received.
-                            Please upload a receipt to finalize your preorder confirmation.
-                        </div>
-                    </div>
-
-                    <form action="{{ route('preorder.confirm', $order) }}" method="POST" enctype="multipart/form-data">
-                        @csrf
-                        <div class="mb-3">
-                            <label for="receipt" class="form-label fw-semibold">Upload Receipt Image</label>
-                            <input class="form-control @error('receipt') is-invalid @enderror" type="file" id="receipt"
-                                name="receipt" required accept="image/png, image/jpeg, image/jpg">
-                            @error('receipt')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                            <div class="form-text">Accepted formats: PNG, JPG, JPEG. Max size: 2MB.</div>
-                        </div>
-
-                        <div class="text-end mt-4">
-                            <button type="submit" class="btn btn-primary">Confirm Pre-Order</button>
-                        </div>
-                    </form>
-                </div>
+    <div class="container py-4 py-lg-5">
+        <div class="main-content-area">
+            <div class="section-header">
+                <h4 class="fw-bold mb-0">Pre-Order Checkout</h4>
             </div>
-        </div>
-    @else
-        <div class="container py-4 py-lg-5">
-            <div class="main-content-area">
-                <div class="section-header">
-                    <h4 class="fw-bold mb-0">Pre-Order Checkout</h4>
+
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    toastr.options = {
+                        closeButton: true,
+                        progressBar: true,
+                        positionClass: 'toast-top-right',
+                        timeOut: '7000',
+                        extendedTimeOut: '2000'
+                    };
+
+                    @if (session('success'))
+                        toastr.success("{{ session('success') }}");
+                    @endif
+                    @if (session('error'))
+                        toastr.error("{{ session('error') }}");
+                    @endif
+                    @if (session('info'))
+                        toastr.info("{{ session('info') }}");
+                    @endif
+                    @if (session('warning'))
+                        toastr.warning("{{ session('warning') }}");
+                    @endif
+                });
+            </script>
+
+            <form id="checkoutForm" action="{{ route('checkout.preorder.store') }}" method="POST" autocomplete="off"
+                novalidate>
+                @csrf
+                <input type="hidden" name="business_id" value="{{ $business_id }}">
+
+                {{-- === DELIVERY INFORMATION & ADDRESS === --}}
+                <div class="checkout-section mb-4">
+                    <h5 class="fw-bold text-dark mb-3">Delivery Information</h5>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Delivery Date</label>
+                            <button type="button" class="form-control btn btn-outline-secondary text-start"
+                                id="date-picker-button">Select a Delivery Date...</button>
+                            <input type="hidden" name="delivery_date" id="delivery_date" required>
+                            <div class="invalid-feedback">Please select a delivery date.</div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Delivery Time</label>
+                            <select class="form-select" name="delivery_time" id="delivery_time" required>
+                                <option value="">Select delivery time</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" name="full_name"
+                                value="{{ old('full_name') ?? ($fullName ?? '') }}" required readonly>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" name="phone_number" id="phone_number" maxlength="11"
+                                inputmode="numeric" placeholder="e.g., 09123456789" required
+                                value="{{ old('phone_number') ?? ($contactNumber && $contactNumber !== '000-000-0000' ? $contactNumber : '') }}">
+                        </div>
+                    </div>
                 </div>
 
-                <script>
-                    document.addEventListener('DOMContentLoaded', function() {
-                        toastr.options = {
-                            closeButton: true,
-                            progressBar: true,
-                            positionClass: 'toast-top-right',
-                            timeOut: '7000',
-                            extendedTimeOut: '2000'
-                        };
+                {{-- === DELIVERY ADDRESS === --}}
+                <div class="checkout-section mb-4">
+                    <h5 class="fw-bold text-dark mb-3">Delivery Address</h5>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Region</label>
+                            <select class="form-select" name="region" id="region_select" required disabled>
+                                <option value="">{{ old('region') ? old('region') : 'Select Region' }}</option>
+                            </select>
+                        </div>
 
-                        @if (session('success'))
-                            toastr.success("{{ session('success') }}");
-                        @endif
-                        @if (session('error'))
-                            toastr.error("{{ session('error') }}");
-                        @endif
-                        @if (session('info'))
-                            toastr.info("{{ session('info') }}");
-                        @endif
-                        @if (session('warning'))
-                            toastr.warning("{{ session('warning') }}");
-                        @endif
-                    });
-                </script>
+                        <div class="col-md-6">
+                            <label class="form-label">Province</label>
+                            <select class="form-select" name="province" id="province_select" required disabled>
+                                <option value="">{{ old('province') ? old('province') : 'Select Province' }}
+                                </option>
+                            </select>
+                        </div>
 
-                <form id="checkoutForm" action="{{ route('checkout.preorder.store') }}" method="POST" autocomplete="off"
-                    novalidate>
-                    @csrf
-                    <input type="hidden" name="business_id" value="{{ $business_id }}">
+                        <div class="col-md-6">
+                            <label class="form-label">City / Municipality</label>
+                            <select class="form-select" name="city" id="city_select" required disabled>
+                                <option value="">{{ old('city') ? old('city') : 'Select City' }}</option>
+                            </select>
+                        </div>
 
-                    {{-- === DELIVERY INFORMATION & ADDRESS === --}}
-                    <div class="checkout-section mb-4">
-                        <h5 class="fw-bold text-dark mb-3">Delivery Information</h5>
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Delivery Date</label>
-                                <button type="button" class="form-control btn btn-outline-secondary text-start"
-                                    id="date-picker-button">Select a Delivery Date...</button>
-                                <input type="hidden" name="delivery_date" id="delivery_date" required>
-                                <div class="invalid-feedback">Please select a delivery date.</div>
-                            </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Barangay</label>
+                            <select class="form-select" name="barangay" id="barangay_select" required disabled>
+                                <option value="">{{ old('barangay') ? old('barangay') : 'Select Barangay' }}
+                                </option>
+                            </select>
+                        </div>
 
-                            <div class="col-md-4">
-                                <label class="form-label">Delivery Time</label>
-                                <select class="form-select" name="delivery_time" id="delivery_time" required>
-                                    <option value="">Select delivery time</option>
-                                </select>
-                            </div>
+                        <div class="col-md-9">
+                            <label class="form-label">Street Name, Building, House No.</label>
+                            <input type="text" class="form-control" name="street_name" id="street_name" required
+                                value="{{ old('street_name') ?? '' }}">
+                        </div>
 
-                            <div class="col-md-4">
-                                <label class="form-label">Full Name</label>
-                                <input type="text" class="form-control" name="full_name"
-                                    value="{{ old('full_name') ?? ($fullName ?? '') }}" required readonly>
-                            </div>
-
-                            <div class="col-md-4">
-                                <label class="form-label">Phone Number</label>
-                                <input type="tel" class="form-control" name="phone_number" id="phone_number"
-                                    maxlength="11" inputmode="numeric" placeholder="e.g., 09123456789" required
-                                    value="{{ old('phone_number') ?? ($contactNumber && $contactNumber !== '000-000-0000' ? $contactNumber : '') }}">
-                            </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Postal Code</label>
+                            <input type="text" class="form-control" name="postal_code" id="postal_code" readonly
+                                placeholder="Auto-populated" required value="{{ old('postal_code') ?? '' }}">
                         </div>
                     </div>
+                </div>
 
-                    {{-- === DELIVERY ADDRESS === --}}
-                    <div class="checkout-section mb-4">
-                        <h5 class="fw-bold text-dark mb-3">Delivery Address</h5>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Region</label>
-                                <select class="form-select" name="region" id="region_select" required disabled>
-                                    <option value="">{{ old('region') ? old('region') : 'Select Region' }}</option>
-                                </select>
-                            </div>
+                <div class="checkout-section mb-4">
+                    <h5 class="fw-bold text-dark mb-3">Delivery Pin Location</h5>
+                    <div id="map" class="rounded shadow-sm border" style="height:400px;"></div>
+                    <input type="hidden" name="latitude" id="latitude">
+                    <input type="hidden" name="longitude" id="longitude">
+                </div>
 
-                            <div class="col-md-6">
-                                <label class="form-label">Province</label>
-                                <select class="form-select" name="province" id="province_select" required disabled>
-                                    <option value="">{{ old('province') ? old('province') : 'Select Province' }}
-                                    </option>
-                                </select>
-                            </div>
+                {{-- === ORDERS & PAYMENT === --}}
+                <div class="checkout-section mb-5">
+                    <h5 class="fw-bold text-dark mb-3">Your Pre-Order</h5>
+                    @php
+                        $business = $vendors->first();
+                        $methods = $business?->paymentMethods ?? collect([]);
+                    @endphp
 
-                            <div class="col-md-6">
-                                <label class="form-label">City / Municipality</label>
-                                <select class="form-select" name="city" id="city_select" required disabled>
-                                    <option value="">{{ old('city') ? old('city') : 'Select City' }}</option>
-                                </select>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label class="form-label">Barangay</label>
-                                <select class="form-select" name="barangay" id="barangay_select" required disabled>
-                                    <option value="">{{ old('barangay') ? old('barangay') : 'Select Barangay' }}
-                                    </option>
-                                </select>
-                            </div>
-
-                            <div class="col-md-9">
-                                <label class="form-label">Street Name, Building, House No.</label>
-                                <input type="text" class="form-control" name="street_name" id="street_name" required
-                                    value="{{ old('street_name') ?? '' }}">
-                            </div>
-
-                            <div class="col-md-3">
-                                <label class="form-label">Postal Code</label>
-                                <input type="text" class="form-control" name="postal_code" id="postal_code" readonly
-                                    placeholder="Auto-populated" required value="{{ old('postal_code') ?? '' }}">
-                            </div>
+                    <div class="checkout-shop mb-4">
+                        <div class="shop-header mb-3">
+                            <h6 class="fw-bold text-dark mb-0">{{ $business?->business_name ?? 'Unknown Business' }}
+                            </h6>
                         </div>
-                    </div>
 
-                    <div class="checkout-section mb-4">
-                        <h5 class="fw-bold text-dark mb-3">Delivery Pin Location</h5>
-                        <div id="map" class="rounded shadow-sm border" style="height:400px;"></div>
-                        <input type="hidden" name="latitude" id="latitude">
-                        <input type="hidden" name="longitude" id="longitude">
-                    </div>
+                        <ul class="list-group mb-5 shadow-sm">
+                            @foreach ($preorders as $item)
+                                @php $product = $products[$item['product_id']] ?? null; @endphp
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary me-2"
+                                            onclick="openNoteModal({{ $business->business_id }}, {{ $item['product_id'] }}, this)"><i
+                                                class="bx bx-note"></i></button>
+                                        <span>{{ $product?->item_name ?? 'Unknown Item' }} ×
+                                            {{ $item['quantity'] }}</span>
+                                    </div>
+                                    <strong
+                                        class="text-primary">₱{{ number_format($item['price'] * $item['quantity'], 2) }}</strong>
 
-                    {{-- === ORDERS & PAYMENT === --}}
-                    <div class="checkout-section mb-5">
-                        <h5 class="fw-bold text-dark mb-3">Your Pre-Order</h5>
-                        @php
-                            $business = $vendors->first();
-                            $methods = $business?->paymentMethods ?? collect([]);
-                        @endphp
-
-                        <div class="checkout-shop mb-4">
-                            <div class="shop-header mb-3">
-                                <h6 class="fw-bold text-dark mb-0">{{ $business?->business_name ?? 'Unknown Business' }}
-                                </h6>
-                            </div>
-
-                            <ul class="list-group mb-5 shadow-sm">
-                                @foreach ($preorders as $item)
-                                    @php $product = $products[$item['product_id']] ?? null; @endphp
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        <div class="d-flex align-items-center">
-                                            <button type="button" class="btn btn-sm btn-outline-secondary me-2"
-                                                onclick="openNoteModal({{ $business->business_id }}, {{ $item['product_id'] }}, this)"><i
-                                                    class="bx bx-note"></i></button>
-                                            <span>{{ $product?->item_name ?? 'Unknown Item' }} ×
-                                                {{ $item['quantity'] }}</span>
-                                        </div>
-                                        <strong
-                                            class="text-primary">₱{{ number_format($item['price'] * $item['quantity'], 2) }}</strong>
-
-                                        {{-- hidden field where note JS writes the note text --}}
-                                        <input type="hidden"
-                                            name="item_notes[{{ $business->business_id }}][{{ $item['product_id'] }}]"
-                                            class="item-note-field" data-business-id="{{ $business->business_id }}"
-                                            data-product-id="{{ $item['product_id'] }}">
-                                    </li>
-                                @endforeach
-                                <li class="list-group-item d-flex justify-content-between bg-light fw-semibold">
-                                    <span>Total</span><span>₱{{ number_format($total, 2) }}</span>
+                                    {{-- hidden field where note JS writes the note text --}}
+                                    <input type="hidden"
+                                        name="item_notes[{{ $business->business_id }}][{{ $item['product_id'] }}]"
+                                        class="item-note-field" data-business-id="{{ $business->business_id }}"
+                                        data-product-id="{{ $item['product_id'] }}">
                                 </li>
-                            </ul>
+                            @endforeach
+                            <li class="list-group-item d-flex justify-content-between bg-light fw-semibold">
+                                <span>Total</span><span>₱{{ number_format($total, 2) }}</span>
+                            </li>
+                        </ul>
 
-                            <div class="card shadow-sm">
-                                <div class="card-header bg-light">
-                                    <h6 class="card-title fw-bold mb-0">Payment</h6>
-                                </div>
-                                <div class="card-body">
+                        <div class="card shadow-sm">
+                            <div class="card-header bg-light">
+                                <h6 class="card-title fw-bold mb-0">Payment</h6>
+                            </div>
+                            <div class="card-body">
 
-                                    @if ($total_advance_required > 0)
-                                        <div class="mt-4 mb-4 p-4 rounded" style="background-color: #fff8eb;">
-                                            <h6 class="fw-bold mb-2 text-dark">
-                                                <i class="bx bx-coin-stack text-warning me-1"></i>
-                                                Advance Payment Required
-                                            </h6>
-                                            <ul class="px-4 list-unstyled small mb-3">
-                                                @foreach ($preorders as $item)
-                                                    @php
-                                                        $product = $products[$item['product_id']] ?? null;
-                                                        $advanceForItem =
-                                                            ($product->advance_amount ?? 0) * $item['quantity'];
-                                                    @endphp
-                                                    @if ($product && $advanceForItem > 0)
-                                                        <li class="d-flex justify-content-between py-1 border-bottom">
-                                                            <span>{{ $product->item_name }} ×
-                                                                {{ $item['quantity'] }}</span>
-                                                            <span
-                                                                class="fw-semibold">₱{{ number_format($advanceForItem, 2) }}</span>
-                                                        </li>
-                                                    @endif
-                                                @endforeach
-                                            </ul>
-                                            <div class="d-flex justify-content-between fw-bold text-dark px-4">
-                                                <span>Total Advance Required:</span>
-                                                <span
-                                                    class="text-warning">₱{{ number_format($total_advance_required, 2) }}</span>
-                                            </div>
+                                @if ($total_advance_required > 0)
+                                    <div class="mt-4 mb-4 p-4 rounded" style="background-color: #fff8eb;">
+                                        <h6 class="fw-bold mb-2 text-dark">
+                                            <i class="bx bx-coin-stack text-warning me-1"></i>
+                                            Advance Payment Required
+                                        </h6>
+                                        <ul class="px-4 list-unstyled small mb-3">
+                                            @foreach ($preorders as $item)
+                                                @php
+                                                    $product = $products[$item['product_id']] ?? null;
+                                                    $advanceForItem =
+                                                        ($product->advance_amount ?? 0) * $item['quantity'];
+                                                @endphp
+                                                @if ($product && $advanceForItem > 0)
+                                                    <li class="d-flex justify-content-between py-1 border-bottom">
+                                                        <span>{{ $product->item_name }} ×
+                                                            {{ $item['quantity'] }}</span>
+                                                        <span
+                                                            class="fw-semibold">₱{{ number_format($advanceForItem, 2) }}</span>
+                                                    </li>
+                                                @endif
+                                            @endforeach
+                                        </ul>
+                                        <div class="d-flex justify-content-between fw-bold text-dark px-4">
+                                            <span>Total Advance Required:</span>
+                                            <span
+                                                class="text-warning">₱{{ number_format($total_advance_required, 2) }}</span>
                                         </div>
+                                    </div>
 
-                                        <div class="mb-4">
-                                            <h6 class="fw-bold small text-uppercase text-muted mb-3">Choose Payment Option
-                                            </h6>
-                                            <div class="list-group">
-                                                <label
-                                                    class="list-group-item list-group-item-action d-flex gap-3 waves-effect">
-                                                    <input class="form-check-input flex-shrink-0" type="radio"
-                                                        name="payment_option" id="pay_advance" value="advance" checked>
-                                                    <div class="d-flex flex-column w-100">
-                                                        <div class="d-flex w-100 justify-content-between">
-                                                            <h6 class="mb-0 fw-semibold text-dark">Pay Advance Now</h6>
-                                                            <span
-                                                                class="fw-bold">₱{{ number_format($total_advance_required, 2) }}</span>
-                                                        </div>
-                                                        <small class="text-muted">Pay remaining on delivery.</small>
+                                    <div class="mb-4">
+                                        <h6 class="fw-bold small text-uppercase text-muted mb-3">Choose Payment Option
+                                        </h6>
+                                        <div class="list-group">
+                                            <label
+                                                class="list-group-item list-group-item-action d-flex gap-3 waves-effect">
+                                                <input class="form-check-input flex-shrink-0" type="radio"
+                                                    name="payment_option" id="pay_advance" value="advance" checked>
+                                                <div class="d-flex flex-column w-100">
+                                                    <div class="d-flex w-100 justify-content-between">
+                                                        <h6 class="mb-0 fw-semibold text-dark">Pay Advance Now</h6>
+                                                        <span
+                                                            class="fw-bold">₱{{ number_format($total_advance_required, 2) }}</span>
                                                     </div>
-                                                </label>
+                                                    <small class="text-muted">Pay remaining on delivery.</small>
+                                                </div>
+                                            </label>
 
-                                                <label
-                                                    class="list-group-item list-group-item-action d-flex gap-3 waves-effect">
-                                                    <input class="form-check-input flex-shrink-0" type="radio"
-                                                        name="payment_option" id="pay_full" value="full">
-                                                    <div class="d-flex flex-column w-100">
-                                                        <div class="d-flex w-100 justify-content-between">
-                                                            <h6 class="mb-0 fw-semibold text-dark">Pay Full Amount Now</h6>
-                                                            <span class="fw-bold">₱{{ number_format($total, 2) }}</span>
-                                                        </div>
+                                            <label
+                                                class="list-group-item list-group-item-action d-flex gap-3 waves-effect">
+                                                <input class="form-check-input flex-shrink-0" type="radio"
+                                                    name="payment_option" id="pay_full" value="full">
+                                                <div class="d-flex flex-column w-100">
+                                                    <div class="d-flex w-100 justify-content-between">
+                                                        <h6 class="mb-0 fw-semibold text-dark">Pay Full Amount Now</h6>
+                                                        <span class="fw-bold">₱{{ number_format($total, 2) }}</span>
                                                     </div>
-                                                </label>
-                                            </div>
+                                                </div>
+                                            </label>
                                         </div>
-                                    @endif
+                                    </div>
+                                @endif
 
-                                    <div>
-                                        <h6 class="fw-bold small text-uppercase text-muted mb-3 payment-label mt-3">Select
-                                            Payment Method</h6>
-                                        <div id="cod-info-text" class="alert alert-info d-none" role="alert">
-                                            An advance payment of
-                                            <strong>₱{{ number_format($total_advance_required, 2) }}</strong> is required
-                                            to
-                                            confirm your COD order. You will be redirected to pay this amount online.
-                                        </div>
+                                <div>
+                                    <h6 class="fw-bold small text-uppercase text-muted mb-3 payment-label mt-3">Select
+                                        Payment Method</h6>
+                                    <div id="cod-info-text" class="alert alert-info d-none" role="alert">
+                                        An advance payment of
+                                        <strong>₱{{ number_format($total_advance_required, 2) }}</strong> is required
+                                        to
+                                        confirm your COD order. You will be redirected to pay this amount online.
+                                    </div>
 
-                                        <div class="row g-3 payment-group"
-                                            data-business-id="{{ $business->business_id ?? 1 }}">
-                                            @if ($methods->isEmpty())
-                                                <div class="col-12 text-danger small">This vendor currently does not accept
-                                                    payments.</div>
-                                            @else
-                                                @foreach ($methods as $i => $method)
-                                                    <div class="col-12 col-md-6">
-                                                        <label class="payment-option w-100">
-                                                            <input type="radio" class="d-none" name="payment_method"
-                                                                value="{{ $method->payment_method_id }}"
-                                                                data-method-name="{{ strtolower($method->method_name) }}"
-                                                                @if ($i === 0) required @endif>
-                                                            @php
-                                                                $methodNameLower = strtolower(
-                                                                    $method->method_name ?? '',
-                                                                );
-                                                                $isCodMethod =
-                                                                    str_contains(
-                                                                        $methodNameLower,
-                                                                        'cash on delivery',
-                                                                    ) ||
-                                                                    str_contains($methodNameLower, 'cod') ||
-                                                                    str_contains($methodNameLower, 'card on delivery');
+                                    <div class="row g-3 payment-group"
+                                        data-business-id="{{ $business->business_id ?? 1 }}">
+                                        @if ($methods->isEmpty())
+                                            <div class="col-12 text-danger small">This vendor currently does not accept
+                                                payments.</div>
+                                        @else
+                                            @foreach ($methods as $i => $method)
+                                                <div class="col-12 col-md-6">
+                                                    <label class="payment-option w-100">
+                                                        <input type="radio" class="d-none" name="payment_method"
+                                                            value="{{ $method->payment_method_id }}"
+                                                            data-method-name="{{ strtolower($method->method_name) }}"
+                                                            @if ($i === 0) required @endif>
+                                                        @php
+                                                            $methodNameLower = strtolower($method->method_name ?? '');
+                                                            $isCodMethod =
+                                                                str_contains($methodNameLower, 'cash on delivery') ||
+                                                                str_contains($methodNameLower, 'cod') ||
+                                                                str_contains($methodNameLower, 'card on delivery');
 
-                                                                $codDescription =
-                                                                    $total_advance_required > 0
-                                                                        ? 'Advance required — you will be redirected to pay the advance now'
-                                                                        : 'Pay with cash upon delivery';
-                                                            @endphp
+                                                            $codDescription =
+                                                                $total_advance_required > 0
+                                                                    ? 'Advance required — you will be redirected to pay the advance now'
+                                                                    : 'Pay with cash upon delivery';
+                                                        @endphp
 
-                                                            <div class="option-tile">
-                                                                <strong>{{ $method->method_name }}</strong>
-                                                                <div class="small text-muted mt-1">
-                                                                    @if ($method->description)
-                                                                        {{ $method->description }}
-                                                                    @elseif($isCodMethod)
-                                                                        {{ $codDescription }}
-                                                                    @endif
-                                                                </div>
+                                                        <div class="option-tile">
+                                                            <strong>{{ $method->method_name }}</strong>
+                                                            <div class="small text-muted mt-1">
+                                                                @if ($method->description)
+                                                                    {{ $method->description }}
+                                                                @elseif($isCodMethod)
+                                                                    {{ $codDescription }}
+                                                                @endif
                                                             </div>
+                                                        </div>
 
-                                                        </label>
-                                                    </div>
-                                                @endforeach
-                                            @endif
-                                        </div>
+                                                    </label>
+                                                </div>
+                                            @endforeach
+                                        @endif
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <div class="text-end mt-4">
-                        <button type="submit" class="btn btn-lg btn-primary">Place Pre-Order</button>
-                    </div>
-                </form>
-            </div>
+                <div class="text-end mt-4">
+                    <button type="submit" class="btn btn-lg btn-primary">Place Pre-Order</button>
+                </div>
+            </form>
         </div>
-    @endif
+    </div>
 
     {{-- MODALS --}}
     <div class="modal fade" id="scheduleModal" tabindex="-1">
@@ -670,12 +626,34 @@
                 function buildSlots(startMin, endMin, step) {
                     step = step || 30;
                     if (startMin === null || endMin === null) return [];
-                    if (startMin >= endMin) return [];
+
                     var out = [];
-                    for (var t = startMin; t + step <= endMin; t += step) {
-                        var hh = Math.floor(t / 60),
-                            mm = t % 60;
-                        out.push((hh < 10 ? '0' + hh : '' + hh) + ':' + (mm < 10 ? '0' + mm : '' + mm));
+                    var MINUTES_IN_DAY = 1440; // 24 * 60
+
+                    if (endMin <= startMin) {
+                        // --- Overnight Case (e.g., 18:00 to 02:00) ---
+
+                        // Part 1: From startMin to midnight (e.g., 18:02 ... 23:32)
+                        for (var t = startMin; t + step <= MINUTES_IN_DAY; t += step) {
+                            var hh = Math.floor(t / 60),
+                                mm = t % 60;
+                            out.push(pad2(hh) + ':' + pad2(mm));
+                        }
+
+                        // Part 2: From midnight (0) to endMin (e.g., 00:00 ... 01:30)
+                        for (var t = 0; t + step <= endMin; t += step) {
+                            var hh = Math.floor(t / 60),
+                                mm = t % 60;
+                            out.push(pad2(hh) + ':' + pad2(mm));
+                        }
+
+                    } else {
+                        // --- Normal Case (e.g., 09:00 to 17:00) ---
+                        for (var t = startMin; t + step <= endMin; t += step) {
+                            var hh = Math.floor(t / 60),
+                                mm = t % 60;
+                            out.push(pad2(hh) + ':' + pad2(mm));
+                        }
                     }
                     return out;
                 }
@@ -725,6 +703,11 @@
                         });
                         window.geocoder = window.geocoder || new google.maps.Geocoder();
                         // --- end existing init code ---
+
+                        // NOW, call the function that sets address defaults and centers the map
+                        // if (typeof applyAddressDefaults === 'function') {
+                        //     applyAddressDefaults();
+                        // }
                     }
 
                     // replace the stub with the real init
@@ -895,7 +878,7 @@
                                 if (citySelect) citySelect.disabled = true; // RE-DISABLE
                             }
                             if (typeof geocodeAndCenterMap === 'function')
-                        geocodeAndCenterMap();
+                                geocodeAndCenterMap();
                         });
                     }
 
@@ -920,14 +903,14 @@
                                     '';
                             }
                             if (typeof geocodeAndCenterMap === 'function')
-                        geocodeAndCenterMap();
+                                geocodeAndCenterMap();
                         });
                     }
 
                     if (barangaySelect) {
                         barangaySelect.addEventListener('change', () => {
                             if (typeof geocodeAndCenterMap === 'function')
-                        geocodeAndCenterMap();
+                                geocodeAndCenterMap();
                         });
                     }
                 });
@@ -1024,6 +1007,9 @@
 
                         var selectedDate = dateEl.value;
                         var dayKey = weekdayKeyFromYMD(selectedDate);
+
+                        //console.log('[Delivery Time] Selected Date:', selectedDate, 'Day Key:', dayKey);
+
                         var previousValue = select.value;
                         select.innerHTML = '';
                         var placeholder2 = document.createElement('option');
@@ -1035,7 +1021,11 @@
                         select.appendChild(placeholder2);
 
                         var hours = openingHours[dayKey];
+                        //console.log('[Delivery Time] Hours for this day:', hours);
+
                         if (!hours || hours.is_closed) {
+                            //console.warn('[Delivery Time] Vendor is closed on this day.');
+
                             var optClosed = document.createElement('option');
                             optClosed.value = '';
                             optClosed.text = 'Vendor is closed on ' + (dayKey.charAt(0).toUpperCase() + dayKey
@@ -1048,7 +1038,11 @@
 
                         var startMin = parseToMinutes(hours.opens_at);
                         var endMin = parseToMinutes(hours.closes_at);
+                        //console.log('[Delivery Time] Parsed Minutes -> Start:', startMin, 'End:', endMin);
+
                         if (startMin === null || endMin === null) {
+                            //console.error('[Delivery Time] Failed to parse start/end times.');
+
                             var optErr = document.createElement('option');
                             optErr.value = '';
                             optErr.text = 'Invalid vendor hours';
@@ -1120,8 +1114,13 @@
                             return;
                         }
 
+                        //console.log('[Delivery Time] Building slots for future date...');
+
                         // Future date path (preorder)
                         var allSlotsFuture = buildSlots(startMin, endMin, 30);
+
+                        //console.log('[Delivery Time] Built slots:', allSlotsFuture);
+
                         for (var m = 0; m < allSlotsFuture.length; m++) {
                             var s = allSlotsFuture[m];
                             var o = document.createElement('option');
@@ -1141,7 +1140,7 @@
                         }
                         select.disabled = false;
                     } catch (err) {
-                        console.error('[delivery-time] populate error', err);
+                        //console.error('[delivery-time] populate error', err);
                     }
                 }
 

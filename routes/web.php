@@ -172,6 +172,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkout/preorder/store', [CheckoutPreorderController::class, 'store'])->name('checkout.preorder.store');
     Route::get('/preorder-schedule/{business}/availability', [CheckoutPreorderController::class, 'getAvailability'])->name('preorder.availability');
     Route::post('/preorder/{order}/confirm', [CheckoutPreorderController::class, 'confirmPreorder'])->name('preorder.confirm');
+    Route::get('/upload/receipt/{order_id}', [CheckoutPreorderController::class, 'uploadReceipt'])->name('preorder.receipt');
 
     // Orders
     Route::get('/customer/orders', [OrdersController::class, 'index'])->name('customer.orders.index');
