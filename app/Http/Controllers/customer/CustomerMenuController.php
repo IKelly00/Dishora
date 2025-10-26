@@ -107,31 +107,45 @@ class CustomerMenuController extends Controller
 
     // ✅ Only fetch vendors if we have stored customer coordinates
     if ($customer && $customer->latitude && $customer->longitude) {
-      // Step 1: get raw nearby vendors
+      // ... (your existing vendor logic remains the same) ...
       $nearbyVendors = $this->locator->getNearbyVendors(
         $customer->customer_id,
         $customer->latitude,
         $customer->longitude
       );
-
-      // Step 2: filter them to only vendors with available products
-      // (using the reusable method we moved into VendorLocatorService)
       $vendors = $this->filterVendorsWithProducts($nearbyVendors);
     }
 
-    // Product categories
+    // Product categories (still needed for $deals)
     $categories = ProductCategory::all();
 
+    // --- START OF CHANGES ---
+
     // All available products (initial load, for "All categories" view)
-    $products   = Product::with(['category', 'dietarySpecifications'])
-      ->where('is_available', true)
+    // OLD QUERY:
+    // $products   = Product::with(['category', 'dietarySpecifications'])
+    //   ->where('is_available', true)
+    //   ->get();
+
+    // NEW QUERY: Get products from customer's past orders
+    $userId = $user->user_id;
+    $pastOrderProducts = Product::with(['category', 'dietarySpecifications', 'business'])
+      ->where('is_available', true) // Only show products they *can* order again
+      ->whereHas('orderItems.order', function ($query) use ($userId) {
+        // Check for products in orders that belong to this user
+        $query->where('user_id', $userId);
+      })
+      ->distinct() // Get each product only once
       ->get();
 
     // Your "deals" (currently set as ProductCategory, maybe rename later)
     $deals = ProductCategory::all();
 
     // Merge vendor-related view meta/context info
-    $viewData = $this->buildViewData($vendor, compact('vendors', 'categories', 'products', 'deals'));
+    // Pass 'pastOrderProducts' instead of 'products'
+    $viewData = $this->buildViewData($vendor, compact('vendors', 'categories', 'pastOrderProducts', 'deals'));
+
+    // --- END OF CHANGES ---
 
     // Return the dashboard
     return view('content.customer.customer-dashboard', $viewData);

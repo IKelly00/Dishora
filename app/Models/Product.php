@@ -44,6 +44,11 @@ class Product extends Model
     return $this->belongsToMany(DietarySpecification::class, 'product_dietary_specifications', 'product_id', 'dietary_specification_id');
   }
 
+  public function orderItems()
+  {
+    return $this->hasMany(OrderItem::class, 'product_id', 'product_id');
+  }
+
   public static function getCutoffOptions(): array
   {
     return [

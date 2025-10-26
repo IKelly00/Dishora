@@ -11,8 +11,8 @@
 
     <style>
         /* ================================
-                                                                                                                                              CONTAINER & LAYOUT BASE
-                                                                                                                                          ================================== */
+                                                                                                                                                                                                                              CONTAINER & LAYOUT BASE
+                                                                                                                                                                                                                          ================================== */
         .container {
             padding: 1.5rem;
             max-width: 100%;
@@ -45,8 +45,8 @@
 
 
         /* ================================
-                                                                                                                                                       CARD STYLING (SHARED)
-                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                       CARD STYLING (SHARED)
+                                                                                                                                                                                                                                    ================================== */
         .card {
             background: #ffffff;
             border: 1px solid #e5e7eb;
@@ -85,8 +85,8 @@
 
 
         /* ================================
-                                                                                                                                                       CARD IMAGE (SHARED)
-                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                       CARD IMAGE (SHARED)
+                                                                                                                                                                                                                                    ================================== */
         .card-img-wrapper {
             position: relative;
             padding-top: 60%;
@@ -112,8 +112,8 @@
 
 
         /* ================================
-                                                                                                                                                       CARD BODY TEXT
-                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                       CARD BODY TEXT
+                                                                                                                                                                                                                                    ================================== */
         .card-body {
             padding: 0.875rem;
         }
@@ -150,8 +150,8 @@
 
 
         /* ================================
-                                                                                                                                                       BUTTONS
-                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                       BUTTONS
+                                                                                                                                                                                                                                    ================================== */
         .btn-primary {
             background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
             border: none;
@@ -184,8 +184,8 @@
 
 
         /* ================================
-                                                                                                                                                       BADGES
-                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                       BADGES
+                                                                                                                                                                                                                                    ================================== */
         .badge.bg-success {
             background-color: #bbf7d0 !important;
             color: #166534;
@@ -199,14 +199,14 @@
 
         .badge.bg-light {
             background-color: #fef3c7 !important;
-            color: #92400e;
+            color: #92400e !important;
             border: 1px solid #fde68a;
         }
 
 
         /* ================================
-                                                                                                                                                       LOCATION MESSAGE
-                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                       LOCATION MESSAGE
+                                                                                                                                                                                                                                    ================================== */
         #location-source-message {
             background: #f9fafb;
             padding: 0.55rem 0.6rem;
@@ -227,8 +227,8 @@
 
 
         /* ================================
-                                                                                                                                                       SCROLLABLE STRIPS (Products & Vendors)
-                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                       SCROLLABLE STRIPS (Products & Vendors)
+                                                                                                                                                                                                                                    ================================== */
         .products-scroll-container,
         .vendors-scroll-container {
             position: relative;
@@ -319,8 +319,8 @@
 
 
         /* ================================
-                                                                                                                                                       LOADER OVERLAY
-                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                       LOADER OVERLAY
+                                                                                                                                                                                                                                    ================================== */
         .vendors-wrapper {
             position: relative;
             min-height: 400px;
@@ -348,9 +348,19 @@
             flex-shrink: 0;
         }
 
-        /* ================================
-                                                                                                                                                       ANIMATED CHECKMARK
-                                                                                                                                                    ================================== */
+        /* ================================ */
+
+        /* Product badge size */
+        .dietary-badge {
+            font-size: 0.65rem;
+            /* Adjust this value as needed */
+            padding: 0.2em 0.4em;
+            /* Make the padding tighter */
+            vertical-align: middle;
+            /* Helps with alignment */
+        }
+
+        /* ================================ ANIMATED CHECKMARK ================================== */
         .checkmark {
             width: 50px;
             height: 50px;
@@ -381,6 +391,8 @@
             animation: check 0.3s ease-out 0.6s forwards;
         }
 
+
+
         @keyframes circle {
             to {
                 stroke-dashoffset: 0;
@@ -395,8 +407,8 @@
 
 
         /* ================================
-                                                                                                                                                       RESPONSIVE ADJUSTMENTS
-                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                       RESPONSIVE ADJUSTMENTS
+                                                                                                                                                                                                                                    ================================== */
         @media (max-width: 768px) {
 
             .product-card,
@@ -476,26 +488,30 @@
             </div>
         </div>
 
-        <!-- Categories -->
+        <!-- Order Again -->
         <div class="main-content-area">
             <div class="section-header">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-                    <h4 class="fw-bold mb-0">Products</h4>
-                    <select class="form-select form-select-sm" id="categoryFilter" style="width: 200px;">
-                        <option value="all" selected>All Categories</option>
-                        @foreach ($categories as $category)
-                            <option value="{{ $category->product_category_id }}">
-                                {{ $category->category_name }}
-                            </option>
-                        @endforeach
-                    </select>
+                    <h4 class="fw-bold mb-0">Order Again</h4>
+
+                    {{-- @if ($pastOrderProducts->count() > 0)
+                        <select class="form-select form-select-sm" id="categoryFilter" style="width: 200px;">
+                            <option value="all" selected>All Categories</option>
+                            @foreach ($categories as $category)
+                                <option value="{{ $category->product_category_id }}">
+                                    {{ $category->category_name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    @endif --}}
+
                 </div>
             </div>
 
-            <!-- Products Horizontal Scroll Container -->
             <div class="products-scroll-container">
                 <div class="products-scroll-wrapper" id="productsContainer">
-                    @foreach ($products as $product)
+
+                    @forelse ($pastOrderProducts as $product)
                         <div class="product-card" data-category="{{ $product->product_category_id }}">
                             <div class="card h-100">
                                 <div class="card-img-wrapper">
@@ -506,7 +522,6 @@
                                     @endif
                                 </div>
                                 <div class="card-body">
-                                    <!-- Store Name -->
                                     <p class="store-name text-muted small mb-1">
                                         <i class="bi bi-shop"></i>
                                         {{ $product->business->business_name ?? 'Unknown Store' }}
@@ -517,7 +532,7 @@
                                         {{ Str::limit($product->description, 50) }}
                                     </p>
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <span class="fw-bold text-primary">${{ number_format($product->price, 2) }}</span>
+                                        <span class="fw-bold text-primary">₱{{ number_format($product->price, 2) }}</span>
                                     </div>
                                     <button
                                         class="btn btn-sm btn-primary w-100 {{ $product->is_pre_order ? 'preorder' : 'addtocart' }}"
@@ -527,19 +542,25 @@
                                     @if ($product->dietarySpecifications->count() > 0)
                                         <div class="mt-2">
                                             @foreach ($product->dietarySpecifications as $spec)
-                                                <span
-                                                    class="badge bg-light text-secondary me-1 small">{{ $spec->name }}</span>
+                                                <span class="badge bg-light text-secondary me-1 dietary-badge">
+                                                    {{ $spec->dietary_spec_name }}
+                                                </span>
                                             @endforeach
                                         </div>
                                     @endif
                                 </div>
                             </div>
                         </div>
-                    @endforeach
+                    @empty
+                        <div class="col-12">
+                            <div class="alert alert-info text-center w-100" role="alert">
+                                You haven't placed any orders yet. Once you do, your items will appear here!
+                            </div>
+                        </div>
+                    @endforelse
                 </div>
             </div>
 
-            <!-- No Products Message (hidden by default) -->
             <div id="noProductsMessage" class="alert alert-info text-center mt-3" style="display: none;">
                 No products found in this category.
             </div>
@@ -734,23 +755,23 @@
                                       ${
                                         vendor.verification_status?.toLowerCase() === 'approved'
                                           ? `<svg class="verified-icon"
-                                     width="16" height="16"
-                                     viewBox="0 0 16 16"
-                                     xmlns="http://www.w3.org/2000/svg"
-                                     style="display:block;">
-                                  <circle cx="8" cy="8" r="8"
-                                          fill="#16a34a"
-                                          stroke="none" />
+                                                                                                                     width="16" height="16"
+                                                                                                                     viewBox="0 0 16 16"
+                                                                                                                     xmlns="http://www.w3.org/2000/svg"
+                                                                                                                     style="display:block;">
+                                                                                                                  <circle cx="8" cy="8" r="8"
+                                                                                                                          fill="#16a34a"
+                                                                                                                          stroke="none" />
 
-                                  <path d="M4 8.5l2.5 2.5L12 5.5"
-                                        fill="none"
-                                        stroke="#ffffff"
-                                        stroke-width="2.2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        shape-rendering="geometricPrecision"
-                                        vector-effect="non-scaling-stroke" />
-                                </svg>`
+                                                                                                                  <path d="M4 8.5l2.5 2.5L12 5.5"
+                                                                                                                        fill="none"
+                                                                                                                        stroke="#ffffff"
+                                                                                                                        stroke-width="2.2"
+                                                                                                                        stroke-linecap="round"
+                                                                                                                        stroke-linejoin="round"
+                                                                                                                        shape-rendering="geometricPrecision"
+                                                                                                                        vector-effect="non-scaling-stroke" />
+                                                                                                                </svg>`
                                           : ''
                                       }
                                   </p>
@@ -775,25 +796,25 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const categoryFilter = document.getElementById('categoryFilter');
+            //const categoryFilter = document.getElementById('categoryFilter');
             const productsContainer = document.getElementById('productsContainer');
             const noProductsMessage = document.getElementById('noProductsMessage');
 
             // Store all products HTML for filtering
             let allProductsHTML = productsContainer.innerHTML;
 
-            categoryFilter.addEventListener('change', function() {
-                const selectedCategory = this.value;
+            // categoryFilter.addEventListener('change', function() {
+            //     const selectedCategory = this.value;
 
-                if (selectedCategory === 'all') {
-                    // Show all products
-                    productsContainer.innerHTML = allProductsHTML;
-                    noProductsMessage.style.display = 'none';
-                } else {
-                    // Filter products using AJAX
-                    filterProducts(selectedCategory);
-                }
-            });
+            //     if (selectedCategory === 'all') {
+            //         // Show all products
+            //         productsContainer.innerHTML = allProductsHTML;
+            //         noProductsMessage.style.display = 'none';
+            //     } else {
+            //         // Filter products using AJAX
+            //         filterProducts(selectedCategory);
+            //     }
+            // });
 
             function filterProducts(categoryId) {
                 // Show loading state
