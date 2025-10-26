@@ -77,10 +77,30 @@
             <li class="nav-item navbar-dropdown dropdown-user dropdown">
                 <a class="nav-link dropdown-toggle hide-arrow p-0" href="javascript:void(0);" data-bs-toggle="dropdown">
                     <div class="avatar avatar-online">
-                        <img src="{{ app()->environment('production')
-                            ? secure_asset('assets/img/avatars/1.png')
-                            : asset('assets/img/avatars/1.png') }}"
-                            alt="user-avatar" class="w-px-40 h-auto rounded-circle">
+                        @php
+                            use App\Models\Customer;
+                            use Illuminate\Support\Facades\Storage;
+                            $user = auth()->user();
+                            $avatarUrl = asset('assets/img/avatars/1.png');
+                            if ($user) {
+                                $uid = $user->user_id ?? $user->id;
+                                $customer = Customer::where('user_id', $uid)->first();
+                                if ($customer) {
+                                    if ($customer->user_image && preg_match('#^https?://#i', $customer->user_image)) {
+                                        $avatarUrl = $customer->user_image;
+                                    } elseif ($customer->user_image) {
+                                        try {
+                                            $avatarUrl = Storage::disk('s3')->url($customer->user_image);
+                                        } catch (\Throwable $e) {
+                                            // keep default
+                                        }
+                                    }
+                                }
+                            }
+                        @endphp
+
+                        <img src="{{ $avatarUrl }}" alt="user-avatar" class="w-px-40 h-auto rounded-circle">
+
                     </div>
                 </a>
 
@@ -91,10 +111,8 @@
                             <div class="d-flex align-items-center">
                                 <div class="flex-shrink-0 me-2">
                                     <div class="avatar avatar-online">
-                                        <img src="{{ app()->environment('production')
-                                            ? secure_asset('assets/img/avatars/1.png')
-                                            : asset('assets/img/avatars/1.png') }}"
-                                            alt="user-avatar" class="w-px-40 h-auto rounded-circle">
+                                        <img src="{{ $avatarUrl }}" alt="user-avatar"
+                                            class="w-px-40 h-auto rounded-circle">
                                     </div>
                                 </div>
                                 <div class="flex-grow-1">
@@ -113,19 +131,20 @@
 
                     {{-- Profile --}}
                     <li>
-                        <a class="dropdown-item" href="javascript:void(0);">
+                        <a class="dropdown-item" href="{{ route('profile.edit') }}">
                             <i class="ri-user-3-line ri-22px me-2"></i>
                             <span class="align-middle">My Profile</span>
                         </a>
                     </li>
 
+
                     {{-- Settings --}}
-                    <li>
+                    {{-- <li>
                         <a class="dropdown-item" href="javascript:void(0);">
                             <i class="ri-settings-4-line ri-22px me-2"></i>
                             <span class="align-middle">Settings</span>
                         </a>
-                    </li>
+                    </li> --}}
 
                     {{-- Billing --}}
                     {{-- <li>

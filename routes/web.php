@@ -40,6 +40,7 @@ use App\Http\Controllers\customer\OrdersController;
 use App\Http\Controllers\customer\OrderHistoryController;
 use App\Http\Controllers\customer\CustomerScheduleController;
 use App\Http\Controllers\customer\ReviewController;
+use App\Http\Controllers\customer\CustomerProfileController;
 
 //Super admin Controllers
 use App\Http\Controllers\SuperAdmin\SuperAdminLoginController;
@@ -192,6 +193,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/customer/messages', [CustomerMenuController::class, 'messages'])->name('customer.messages');
     Route::get('/messages/show/{business_id}/{vendor_user_id}', [CustomerMenuController::class, 'getMessageThread'])->name('customer.messages.show');
     Route::post('/messages/send', [CustomerMenuController::class, 'sendMessage'])->name('customer.messages.send');
+
+    // Profile
+    Route::get('/profile/edit', [CustomerProfileController::class, 'edit'])->name('profile.edit');
+    Route::post('/profile/update', [CustomerProfileController::class, 'update'])->name('profile.update');
   });
 
   // ---------------------------------------------------------------

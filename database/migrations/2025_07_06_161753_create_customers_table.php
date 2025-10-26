@@ -14,6 +14,7 @@ return new class extends Migration
     Schema::create('customers', function (Blueprint $table) {
       $table->id('customer_id');
       $table->unsignedBigInteger('user_id');
+      $table->string('user_image', 255)->nullable();
       $table->text('user_address')->nullable();
       $table->double('latitude')->nullable();
       $table->double('longitude')->nullable();
