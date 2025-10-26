@@ -177,6 +177,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/customer/orders', [OrdersController::class, 'index'])->name('customer.orders.index');
     Route::post('/orders/cancel/{order_id}', [OrdersController::class, 'cancel'])->name('orders.cancel');
     Route::get('/customer/order-history', [OrderHistoryController::class, 'index'])->name('customer.orderhist.index');
+    Route::post('/orders/cancel/{order_id}', [CheckoutCartController::class, 'cancelOrder'])->name('orders.cancel');
 
     // Schedule & Vendor Modal
     Route::post('/dismiss-vendor-status-modal', [CustomerMenuController::class, 'dismissStatusModal'])->name('dismiss.vendor.status.modal');

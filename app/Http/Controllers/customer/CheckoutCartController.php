@@ -295,16 +295,20 @@ class CheckoutCartController extends Controller
 
           $data = $response->json();
 
-          // try to extract stable IDs and checkout_url robustly
-          $sessionId = $data['data']['id'] ?? ($data['data']['attributes']['payment_intent']['id'] ?? null);
+          // --- START MODIFICATION ---
+          // We must get the payment_intent_id for refunds, not the session_id.
+
+          $paymentIntentId = $data['data']['attributes']['payment_intent']['id'] ?? null;
           $checkoutUrl = $data['data']['attributes']['checkout_url'] ?? null;
 
-          if (empty($data['data']) || !$sessionId || !$checkoutUrl) {
+          if (empty($data['data']) || !$paymentIntentId || !$checkoutUrl) {
+            Log::error('PayMongo Error: Missing payment_intent_id or checkout_url', ['response' => $data]);
             throw new Exception("PayMongo error: " . ($data['errors'][0]['detail'] ?? json_encode($data)));
           }
 
-          // Save the session id (or payment_intent id)
-          $draft->update(['transaction_id' => $sessionId]);
+          // Save the Payment Intent ID (pi_...) which is required for refunds
+          $draft->update(['transaction_id' => $paymentIntentId]);
+          // --- END MODIFICATION ---
 
           $onlineSessions[] = [
             'draft_id' => $draft->checkout_draft_id,
@@ -678,18 +682,128 @@ class CheckoutCartController extends Controller
   }
 
   /**
-   * Optional helper to clear a transaction_id from cart items in the session (if needed).
-   * Kept for parity with Preorder controller flow.
+   * Handles the cancellation request from the customer.
+   * Issues a refund via PayMongo if the order was paid online.
    */
-  private function clearTransactionFromSession($transactionId)
+  public function cancelOrder(Request $request, $order_id)
   {
-    $currentCart = collect(session('cart', []));
-    $cleaned = $currentCart->map(function ($item) use ($transactionId) {
-      if (isset($item['transaction_id']) && $item['transaction_id'] === $transactionId) {
-        unset($item['transaction_id']);
+    Log::info("Attempting to cancel order #{$order_id} for user " . Auth::id());
+
+    DB::beginTransaction();
+    try {
+      // Find the order, and load its payment details and payment method
+      $order = Order::with('paymentDetails.paymentMethod', 'items')
+        ->where('order_id', $order_id)
+        ->where('user_id', Auth::id()) // Ensure user owns this order
+        ->firstOrFail();
+
+      // 1. Check if order is eligible for cancellation
+      $canCancel = $order->items->every(fn($item) => $item->order_item_status === 'Pending');
+
+      if (!$canCancel) {
+        DB::rollBack();
+        return back()->with('error', 'This order can no longer be cancelled as it is already being processed.');
       }
-      return $item;
-    })->all();
-    session(['cart' => $cleaned]);
+
+      // 2. Check payment type
+      $paymentDetail = $order->paymentDetails->first();
+      $paymentMethod = $paymentDetail?->paymentMethod;
+      $isCod = false;
+
+      if ($paymentMethod) {
+        $methodName = strtolower(trim($paymentMethod->method_name));
+        $isCod = in_array($methodName, ['cash on delivery', 'cod', 'card on delivery']);
+      }
+
+      // 3. Handle cancellation
+      if ($isCod || !$paymentDetail || !$paymentDetail->transaction_id || $paymentDetail->payment_status !== 'Paid') {
+
+        // --- CASE 1: COD or PENDING/FAILED PAYMENT ---
+        Log::info("Cancelling COD/Offline order #{$order->order_id} locally.");
+
+        $order->items()->update(['order_item_status' => 'Cancelled']);
+        if ($paymentDetail) {
+          $paymentDetail->update(['payment_status' => 'Cancelled']);
+        }
+      } else {
+
+        // --- CASE 2: ONLINE PAYMENT (GCash, Card, etc.) ---
+        Log::info("Processing PayMongo refund for order #{$order->order_id}");
+
+        // This is the 'pi_...' ID you saved in the database
+        $paymentIntentId = $paymentDetail->transaction_id;
+        $refundAmount = (int) round($order->total * 100); // Amount in cents
+        $paymongoSecret = config('services.paymongo.secret');
+
+        // --- START MODIFICATION (FIX FOR 'payment_id required') ---
+
+        // STEP A: First, retrieve the Payment Intent to get the 'pay_...' ID
+        Log::info("Retrieving Payment Intent {$paymentIntentId} to find payment_id");
+
+        $retrieveResponse = Http::withHeaders([
+          'accept' => 'application/json',
+          'authorization' => 'Basic ' . base64_encode($paymongoSecret . ':')
+        ])->get("https://api.paymongo.com/v1/payment_intents/{$paymentIntentId}");
+
+        $intentData = $retrieveResponse->json();
+
+        // Get the *actual* payment ID from the 'payments' array
+        $paymentId = $intentData['data']['attributes']['payments'][0]['id'] ?? null;
+
+        if (!$paymentId) {
+          Log::error("Could not find a successful payment_id for Intent {$paymentIntentId}", ['response' => $intentData]);
+          throw new Exception('Could not find the associated charge for this order.');
+        }
+
+        Log::info("Found payment_id {$paymentId} for refund.");
+
+        // STEP B: Now, create the refund using the 'pay_...' ID
+        $response = Http::withHeaders([
+          'accept' => 'application/json',
+          'content-type' => 'application/json',
+          'authorization' => 'Basic ' . base64_encode($paymongoSecret . ':')
+        ])->post('https://api.paymongo.com/v1/refunds', [
+          'data' => [
+            'attributes' => [
+              'amount' => $refundAmount,
+
+              // FIX 1: Use 'payment_id' with the 'pay_...' ID we just fetched
+              'payment_id' => $paymentId,
+
+              // FIX 2: Use the correct 'reason' string
+              'reason' => 'requested_by_customer'
+            ]
+          ]
+        ]);
+
+        // --- END MODIFICATION ---
+
+        $responseData = $response->json();
+
+        if ($response->successful() && isset($responseData['data']['attributes']['status'])) {
+
+          Log::info("PayMongo refund successful for order #{$order->order_id}", ['response' => $responseData]);
+
+          $order->items()->update(['order_item_status' => 'Cancelled']);
+
+          $paymentDetail->update([
+            'payment_status' => 'Refunded',
+            // 'notes' => 'Refund ID: ' . ($responseData['data']['id'] ?? 'N/A')
+          ]);
+        } else {
+          // Refund API call failed
+          Log::error("PayMongo refund FAILED for order #{$order->order_id}", ['response' => $responseData]);
+          throw new Exception('The payment gateway rejected the refund request. Please contact support.');
+        }
+      }
+
+      // 4. Commit and Redirect
+      DB::commit();
+      return redirect()->route('customer.orders.index')->with('success', 'Order has been successfully cancelled.');
+    } catch (Exception $e) {
+      DB::rollBack();
+      Log::error("Failed to cancel order #{$order_id}", ['error' => $e->getMessage()]);
+      return back()->with('error', 'Failed to cancel order: ' . $e->getMessage());
+    }
   }
 }

@@ -109,8 +109,8 @@
                                     // --- END: This is the FIX ---
 
                                     // Also, let's trim the time values just to be safe, like in your checkout controller
-        $opens_at = substr($hoursToday->opens_at, 0, 8); // "09:00:00"
-        $closes_at = substr($hoursToday->closes_at, 0, 8); // "17:00:00"
+        $opens_at = substr($hoursToday->opens_at, 0, 8);
+        $closes_at = substr($hoursToday->closes_at, 0, 8);
 
         if ($currentTime >= $opens_at && $currentTime <= $closes_at) {
             $isBusinessOpen = true;
