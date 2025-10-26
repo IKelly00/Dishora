@@ -178,8 +178,29 @@
                                         </div>
                                         <div class="col-6 text-end">
                                             <div class="text-muted small mb-1 fw-semibold">Delivery Date</div>
+
+                                            @php
+                                                // Format delivery time to hours:minutes only (tries Carbon, falls back to removing seconds)
+                                                $formattedDeliveryTime = null;
+                                                if (!empty($order->delivery_time)) {
+                                                    try {
+                                                        $formattedDeliveryTime = \Carbon\Carbon::parse(
+                                                            $order->delivery_time,
+                                                        )->format('g:i A'); // 12-hour with AM/PM
+                                                    } catch (\Exception $e) {
+                                                        // fallback: remove trailing seconds if present (e.g. "08:30:00" -> "08:30")
+                                                        $formattedDeliveryTime = preg_replace(
+                                                            '/:(\d{2})(\s*[APMapm\.]*)$/',
+                                                            '$2',
+                                                            trim($order->delivery_time),
+                                                        );
+                                                        $formattedDeliveryTime = trim($formattedDeliveryTime);
+                                                    }
+                                                }
+                                            @endphp
                                             <div class="fw-semibold">
-                                                {{ \Carbon\Carbon::parse($order->delivery_date)->format('M d, Y') }}</div>
+                                                {{ \Carbon\Carbon::parse($order->delivery_date)->format('M d, Y') }}{{ $formattedDeliveryTime ? ', ' . $formattedDeliveryTime : '' }}
+                                            </div>
                                         </div>
                                     </div>
 
