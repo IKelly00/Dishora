@@ -390,30 +390,37 @@
                         <div class="row g-3">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Region</label>
-                                <select class="form-select @error('region') is-invalid @enderror" name="region"
-                                    id="region_select" required></select>
+                                {{-- MODIFIED: name="region_display", added disabled, added hidden input --}}
+                                <select class="form-select @error('region') is-invalid @enderror" name="region_display"
+                                    id="region_select" required disabled></select>
+                                <input type="hidden" name="region" id="region_hidden">
                                 @error('region')
                                     <div class="error-message">{{ $message }}</div>
                                 @enderror
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Province</label>
-                                <select class="form-select @error('province') is-invalid @enderror" name="province"
-                                    id="province_select" required disabled></select>
+                                {{-- MODIFIED: name="province_display", added disabled, added hidden input --}}
+                                <select class="form-select @error('province') is-invalid @enderror"
+                                    name="province_display" id="province_select" required disabled></select>
+                                <input type="hidden" name="province" id="province_hidden">
                                 @error('province')
                                     <div class="error-message">{{ $message }}</div>
                                 @enderror
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">City / Municipality</label>
-                                <select class="form-select @error('city') is-invalid @enderror" name="city"
+                                {{-- MODIFIED: name="city_display", added disabled, added hidden input --}}
+                                <select class="form-select @error('city') is-invalid @enderror" name="city_display"
                                     id="city_select" required disabled></select>
+                                <input type="hidden" name="city" id="city_hidden">
                                 @error('city')
                                     <div class="error-message">{{ $message }}</div>
                                 @enderror
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Barangay</label>
+                                {{-- UNCHANGED: This one should be selectable --}}
                                 <select class="form-select @error('barangay') is-invalid @enderror" name="barangay"
                                     id="barangay_select" required disabled></select>
                                 @error('barangay')
@@ -657,7 +664,7 @@
                                     <button type="button" class="btn btn-sm btn-secondary cancel-btn me-1"
                                         data-input="valid_id_input" data-display="valid_id_file_name">Cancel</button>
                                     <button type="button" class="btn btn-sm btn-primary import-btn"
-                                        id="valid_id_import_btn">Upload</button>
+                                        data-input="valid_id_input" id="valid_id_import_btn">Upload</button>
                                 </div>
                                 @error('valid_id')
                                     <div class="error-message">{{ $message }}</div>
@@ -944,9 +951,13 @@
 
 
                 /* ---------- Philippine Addresses Logic ---------- */
+                // MODIFIED: Added hidden input consts
                 const regionSelect = safeQuery('region_select');
+                const regionHidden = safeQuery('region_hidden');
                 const provinceSelect = safeQuery('province_select');
+                const provinceHidden = safeQuery('province_hidden');
                 const citySelect = safeQuery('city_select');
+                const cityHidden = safeQuery('city_hidden');
                 const barangaySelect = safeQuery('barangay_select');
                 const streetInput = safeQuery('street_name');
                 const postalCodeInput = safeQuery('postal_code');
@@ -977,12 +988,26 @@
                 try {
                     if (regionSelect && typeof philippineAddresses !== 'undefined') {
                         const regions = Object.keys(philippineAddresses).sort();
+
+                        // --- START: MODIFIED FOR DEFAULTS ---
                         const oldRegion = "{{ old('region') }}";
-                        populateSelect(regionSelect, regions, 'Select Region', oldRegion);
+                        // Default to 'V' if oldRegion is empty
+                        const defaultRegion = oldRegion ? oldRegion : 'V';
+                        populateSelect(regionSelect, regions, 'Select Region', defaultRegion);
+                        if (regionSelect) regionSelect.disabled = true; // Force disable
+                        if (regionHidden) regionHidden.value = regionSelect.value; // Set hidden input
 
                         const oldProvince = "{{ old('province') }}";
+                        // Default to 'CAMARINES SUR' if oldProvince is empty
+                        const defaultProvince = oldProvince ? oldProvince : 'CAMARINES SUR';
+
                         const oldCity = "{{ old('city') }}";
+                        // Default to 'NAGA CITY' if oldCity is empty
+                        const defaultCity = oldCity ? oldCity : 'NAGA CITY';
+
                         const oldBarangay = "{{ old('barangay') }}";
+                        // --- END: MODIFIED FOR DEFAULTS ---
+
 
                         function updateProvinces(selectedRegion) {
                             resetSelect(provinceSelect, 'Select Province');
@@ -992,9 +1017,20 @@
                             if (selectedRegion && philippineAddresses[selectedRegion]) {
                                 const provinces = Object.keys(philippineAddresses[selectedRegion].province_list)
                                     .sort();
-                                // Pass oldProvince only if it belongs to the selectedRegion (or on initial load)
-                                const provinceToSelect = (oldRegion === selectedRegion) ? oldProvince : null;
-                                populateSelect(provinceSelect, provinces, 'Select Province', provinceToSelect);
+
+                                // --- START: MODIFIED FOR DEFAULTS ---
+                                // Use oldProvince if it matches the region, OR use defaultProvince if no old data and region matches default ('V')
+                                const provinceToSelect = (oldRegion === selectedRegion) ?
+                                    oldProvince :
+                                    (!oldRegion && selectedRegion === 'V' ? defaultProvince : null);
+                                // --- END: MODIFIED FOR DEFAULTS ---
+
+                                populateSelect(provinceSelect, provinces, 'Select Province',
+                                    provinceToSelect);
+                                if (provinceSelect) provinceSelect.disabled = true; // Force disable
+                                if (provinceHidden) provinceHidden.value = provinceSelect
+                                .value; // Set hidden input
+
                                 if (provinceSelect.value) updateCities(selectedRegion, provinceSelect.value);
                             }
                         }
@@ -1007,9 +1043,21 @@
                                 ?.province_list[selectedProvince]) {
                                 const cities = Object.keys(philippineAddresses[selectedRegion].province_list[
                                     selectedProvince].municipality_list).sort();
+
+                                // --- START: MODIFIED FOR DEFAULTS ---
+                                // Use oldCity if path matches, OR use defaultCity if no old data and path matches default
                                 const cityToSelect = (oldRegion === selectedRegion && oldProvince ===
-                                    selectedProvince) ? oldCity : null;
-                                populateSelect(citySelect, cities, 'Select City / Municipality', cityToSelect);
+                                        selectedProvince) ?
+                                    oldCity :
+                                    (!oldRegion && !oldProvince && selectedRegion === 'V' &&
+                                        selectedProvince === 'CAMARINES SUR' ? defaultCity : null);
+                                // --- END: MODIFIED FOR DEFAULTS ---
+
+                                populateSelect(citySelect, cities, 'Select City / Municipality',
+                                    cityToSelect);
+                                if (citySelect) citySelect.disabled = true; // Force disable
+                                if (cityHidden) cityHidden.value = citySelect.value; // Set hidden input
+
                                 if (citySelect.value) updateBarangaysAndPostal(selectedRegion, selectedProvince,
                                     citySelect.value);
                             }
@@ -1026,6 +1074,7 @@
                                 if (cityData.barangay_list) {
                                     const barangayToSelect = (oldRegion === selectedRegion && oldProvince ===
                                         selectedProvince && oldCity === selectedCity) ? oldBarangay : null;
+                                    // MODIFIED: BarangaySelect is NOT disabled, so we call populateSelect normally.
                                     populateSelect(barangaySelect, cityData.barangay_list.sort(),
                                         'Select Barangay', barangayToSelect);
                                 }
@@ -1033,25 +1082,18 @@
                             }
                         }
 
-                        // Initial population based on old input
+                        // Initial population based on old input (or defaults)
                         if (regionSelect.value) {
                             updateProvinces(regionSelect.value);
                         }
 
                         // Event listeners
-                        regionSelect.addEventListener('change', () => {
-                            updateProvinces(regionSelect.value);
-                            geocodeDebounced();
-                        });
-                        provinceSelect?.addEventListener('change', () => {
-                            updateCities(regionSelect.value, provinceSelect.value);
-                            geocodeDebounced();
-                        });
-                        citySelect?.addEventListener('change', () => {
-                            updateBarangaysAndPostal(regionSelect.value, provinceSelect.value,
-                                citySelect.value);
-                            geocodeDebounced();
-                        });
+                        // MODIFIED: Region/Province/City listeners are no longer needed as they are disabled
+                        // regionSelect.addEventListener('change', () => { ... });
+                        // provinceSelect?.addEventListener('change', () => { ... });
+                        // citySelect?.addEventListener('change', () => { ... });
+
+                        // Barangay and Street listeners are still needed
                         barangaySelect?.addEventListener('change', geocodeDebounced);
                         streetInput?.addEventListener('blur', geocodeDebounced);
 
@@ -1117,15 +1159,21 @@
                 function validateStep1() {
                     removeErrors('#step1');
                     let ok = true;
+                    // MODIFIED: Check the hidden inputs for region/province/city
                     ['fullname', 'phone_number', 'business_name', 'business_type', 'business_description',
-                        'region_select', 'province_select', 'city_select', 'barangay_select', 'street_name',
+                        'region_hidden', 'province_hidden', 'city_hidden', 'barangay_select', 'street_name',
                         'postal_code'
                     ].forEach(id => {
                         const el = safeQuery(id);
                         if (!el || !String(el.value || '').trim()) {
                             ok = false;
-                            el?.classList.add('is-invalid');
-                            el?.closest('.input-group')?.classList.add('is-invalid');
+                            // Find the *visible* element to apply the class to
+                            let visibleEl = el;
+                            if (id.includes('_hidden')) {
+                                visibleEl = safeQuery(id.replace('_hidden', '_select'));
+                            }
+                            visibleEl?.classList.add('is-invalid');
+                            visibleEl?.closest('.input-group')?.classList.add('is-invalid');
                         }
                     });
                     let hasOpenDay = false;
