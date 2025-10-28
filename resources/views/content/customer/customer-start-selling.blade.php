@@ -658,7 +658,7 @@
                                     <div>
                                         <button type="button" class="btn btn-sm btn-secondary cancel-btn"
                                             data-input="bir_registration_input"
-                                            data-display="bir_file_name">Cancel</button>
+                                            data-display="bir_file_name">Remove</button>
                                         <button type="button" class="btn btn-sm btn-primary import-btn"
                                             data-input="bir_registration_input">Upload</button>
                                     </div>
@@ -710,7 +710,7 @@
 
                                 <div class="d-flex justify-content-end">
                                     <button type="button" class="btn btn-sm btn-secondary cancel-btn me-1"
-                                        data-input="valid_id_input" data-display="valid_id_file_name">Cancel</button>
+                                        data-input="valid_id_input" data-display="valid_id_file_name">Remove</button>
                                     <button type="button" class="btn btn-sm btn-primary import-btn"
                                         data-input="valid_id_input" id="valid_id_import_btn">Upload</button>
                                 </div>
@@ -757,7 +757,7 @@
                                 <div class="d-flex justify-content-end">
                                     <button type="button" class="btn btn-sm btn-secondary cancel-btn me-1"
                                         data-input="business_permit_input"
-                                        data-display="business_permit_file_name">Cancel</button>
+                                        data-display="business_permit_file_name">Remove</button>
                                     <button type="button" class="btn btn-sm btn-primary import-btn"
                                         data-input="business_permit_input">Upload</button>
                                 </div>
@@ -800,7 +800,7 @@
                                 <div class="d-flex justify-content-end">
                                     <button type="button" class="btn btn-sm btn-secondary cancel-btn me-1"
                                         data-input="mayors_permit_input"
-                                        data-display="mayors_permit_file_name">Cancel</button>
+                                        data-display="mayors_permit_file_name">Remove</button>
                                     <button type="button" class="btn btn-sm btn-primary import-btn"
                                         data-input="mayors_permit_input">Upload</button>
                                 </div>
