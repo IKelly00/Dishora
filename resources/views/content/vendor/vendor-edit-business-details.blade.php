@@ -240,15 +240,15 @@
                 <div class="d-flex justify-content-between align-items-center h-100 position-relative" style="z-index: 3;">
                     <div class="d-flex flex-column align-items-center" style="width: 33%;">
                         <div class="step-indicator step-active" id="step1-indicator">1</div>
-                        <div class="small text-muted" style="margin-top: 10px;">Business Information</div>
+                        <div class="small text-muted" style="margin-top: 10px;">Edit Business Information</div>
                     </div>
                     <div class="d-flex flex-column align-items-center" style="width: 33%;">
                         <div class="step-indicator step-inactive" id="step2-indicator">2</div>
-                        <div class="small text-muted" style="margin-top: 10px;">Accepted Payment Methods</div>
+                        <div class="small text-muted" style="margin-top: 10px;">Edit Payment Methods</div>
                     </div>
                     <div class="d-flex flex-column align-items-center" style="width: 33%;">
                         <div class="step-indicator step-inactive" id="step3-indicator">3</div>
-                        <div class="small text-muted" style="margin-top: 10px;">Requirements</div>
+                        <div class="small text-muted" style="margin-top: 10px;">Edit Requirements</div>
                     </div>
                 </div>
             </div>
@@ -753,7 +753,7 @@
                                     <div>
                                         <button type="button" class="btn btn-sm btn-secondary cancel-btn"
                                             data-input="bir_registration_input"
-                                            data-display="bir_file_name">Cancel</button>
+                                            data-display="bir_file_name">Remove</button>
                                         <button type="button" class="btn btn-sm btn-primary import-btn"
                                             data-input="bir_registration_input">Upload</button>
                                     </div>
@@ -809,7 +809,7 @@
 
                                 <div class="d-flex justify-content-end">
                                     <button type="button" class="btn btn-sm btn-secondary cancel-btn me-1"
-                                        data-input="valid_id_input" data-display="valid_id_file_name">Cancel</button>
+                                        data-input="valid_id_input" data-display="valid_id_file_name">Remove</button>
                                     <button type="button" class="btn btn-sm btn-primary import-btn"
                                         data-input="valid_id_input" id="valid_id_import_btn">Upload</button>
                                 </div>
@@ -860,7 +860,7 @@
                                 <div class="d-flex justify-content-end">
                                     <button type="button" class="btn btn-sm btn-secondary cancel-btn me-1"
                                         data-input="business_permit_input"
-                                        data-display="business_permit_file_name">Cancel</button>
+                                        data-display="business_permit_file_name">Remove</button>
                                     <button type="button" class="btn btn-sm btn-primary import-btn"
                                         data-input="business_permit_input">Upload</button>
                                 </div>
@@ -908,7 +908,7 @@
                                 <div class="d-flex justify-content-end">
                                     <button type="button" class="btn btn-sm btn-secondary cancel-btn me-1"
                                         data-input="mayors_permit_input"
-                                        data-display="mayors_permit_file_name">Cancel</button>
+                                        data-display="mayors_permit_file_name">Remove</button>
                                     <button type="button" class="btn btn-sm btn-primary import-btn"
                                         data-input="mayors_permit_input">Upload</button>
                                 </div>
@@ -924,7 +924,7 @@
                         <button type="button" class="btn btn-secondary rounded-pill px-4"
                             onclick="goToStep2()">Back</button>
                         <button type="submit" class="btn btn-success rounded-pill px-4"
-                            onclick="prepareSubmit(event)">Submit</button>
+                            onclick="prepareSubmit(event)">Save</button>
                     </div>
                 </div>
             </form>
