@@ -45,8 +45,9 @@
                             <p class="small mb-3">Jump to important management tools.</p>
                             <a href="{{ route('super-admin.businesses.index') }}" class="btn btn-light btn-sm w-100">Manage
                                 Businesses</a>
-                            <a href="{{ route('super-admin.users.index') }}" class="btn btn-light btn-sm w-100 mt-2">Manage
-                                Users</a>
+                            <a href="{{ route('super-admin.vendors.index') }}"
+                                class="btn btn-light btn-sm w-100 mt-2">Manage
+                                Vendors</a>
                             {{-- <a href="#" class="btn btn-light btn-sm w-100 mt-2">Manage Vendors</a> --}}
                         </div>
                     </div>

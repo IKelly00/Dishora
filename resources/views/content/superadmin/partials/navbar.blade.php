@@ -124,8 +124,8 @@
     }
 </style>
 
-<div class="nav-align-top">
-    <ul class="nav nav-tabs" role="tablist">
+<div class="d-flex align-items-center justify-content-between">
+    <ul class="nav nav-tabs mb-0 flex-grow-1" role="tablist">
         {{-- Dashboard Link --}}
         <li class="nav-item">
             <a class="nav-link {{ request()->routeIs('super-admin.dashboard') ? 'active' : '' }}"
@@ -134,10 +134,9 @@
             </a>
         </li>
 
-        {{-- == VENDORS LINK == --}}
+        {{-- Vendors Link --}}
         <li class="nav-item">
-            {{-- Check if route name STARTS WITH 'super-admin.vendors.' or related vendor routes --}}
-            <a class="nav-link {{ request()->routeIs('super-admin.vendors.index') /* || request()->routeIs('super-admin.vendor.*') */ ? 'active' : '' }}"
+            <a class="nav-link {{ request()->routeIs('super-admin.vendors.index') ? 'active' : '' }}"
                 href="{{ route('super-admin.vendors.index') }}">
                 <i class='bx bxs-user-detail me-1'></i> Manage Vendors
             </a>
@@ -159,4 +158,12 @@
             </a>
         </li>
     </ul>
+
+    {{-- Logout Button (aligned right) --}}
+    <form action="{{ route('super-admin.logout') }}" method="POST" class="ms-3">
+        @csrf
+        <button type="submit" class="btn btn-outline-danger btn-sm d-flex align-items-center">
+            <i class='bx bx-log-out-circle me-1'></i> Logout
+        </button>
+    </form>
 </div>

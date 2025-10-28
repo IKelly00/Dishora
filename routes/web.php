@@ -82,9 +82,9 @@ Route::post('/register', [RegisterController::class, 'register'])->name('registe
 Route::prefix('super-admin')->name('super-admin.')->group(function () {
 
   // Login routes
-  Route::get('/login', [SuperAdminLoginController::class, 'showLoginForm'])->name('login');      // form
-  Route::post('/login', [SuperAdminLoginController::class, 'login'])->name('login.post');      // submit
-  Route::get('/logout', [SuperAdminLoginController::class, 'logout'])->name('logout');         // POST logout
+  Route::get('/login', [SuperAdminLoginController::class, 'showLoginForm'])->name('login');
+  Route::post('/login', [SuperAdminLoginController::class, 'login'])->name('login.post');
+  Route::post('/logout', [SuperAdminLoginController::class, 'logout'])->name('logout');
 
   // Protected routes
   Route::middleware(['auth:superadmin', 'is.superadmin'])->group(function () {
