@@ -175,6 +175,31 @@
             opacity: 0 !important;
             visibility: hidden !important;
         }
+
+        .drop-zone .file-preview-img {
+            max-height: 220px;
+            /* increased height for clearer preview */
+            width: auto;
+            max-width: 100%;
+            display: block;
+            margin: 0 auto;
+            object-fit: contain;
+        }
+
+        .drop-zone .file-preview-container {
+            width: 100%;
+            text-align: center;
+        }
+
+        #business_image_preview img {
+            width: 320px;
+            /* wider preview */
+            height: 200px;
+            /* taller preview */
+            object-fit: cover;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        }
     </style>
 
     <div class="container mb-4">
@@ -244,11 +269,11 @@
                 id="start-selling-form">
                 @csrf
 
-                {{-- Toastr File Type Alert --}}
+                {{-- Toastr File Type Alert (No longer used for validation, but kept for potential future use) --}}
                 <div id="fileTypeAlert"
                     class="alert alert-danger position-fixed top-0 start-50 translate-middle-x mt-3 d-none" role="alert"
                     style="min-width: 300px; z-index: 9999;">
-                    Invalid file type. Only JPG, PNG, and PDF are allowed.
+                    Invalid file type.
                 </div>
 
                 {{-- Server-side Validation Errors --}}
@@ -308,13 +333,13 @@
                                 <div class="border border-dashed rounded mb-2 bg-light d-flex flex-column justify-content-center align-items-center drop-zone @error('business_image') is-invalid @enderror"
                                     style="cursor:pointer; height: 200px;" data-input-id="business_image_input"
                                     data-display-id="business_image_file_name">
-                                    <input type="file" name="business_image" accept=".jpg,.jpeg,.png" class="d-none"
+                                    <input type="file" name="business_image" class="d-none"
                                         id="business_image_input">
                                     <div id="business_upload_placeholder" class="text-center">
                                         <i class="ri-image-line" style="font-size: 1.8rem;"></i><br>
                                         <span class="text-muted">Drag & Drop or <span class="text-primary">Choose
                                                 image</span> to upload</span><br>
-                                        <small class="text-muted">PNG, JPEG only</small>
+                                        <small class="text-muted">Any file type</small> {{-- Updated text --}}
                                     </div>
                                     <div id="business_image_preview" style="display:none; cursor:pointer;">
                                         <img src="#" alt="Business Image Preview" class="rounded"
@@ -322,7 +347,7 @@
                                     </div>
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label">Image Uploaded</label>
+                                    <label class="form-label">File Uploaded</label>
                                     <input type="text" class="form-control form-control-sm"
                                         id="business_image_file_name" value="None" readonly>
                                 </div>
@@ -604,12 +629,21 @@
                                 <div class="border border-dashed p-4 text-center mb-2 bg-light drop-zone @error('bir_registration') is-invalid @enderror @error('business_duration') is-invalid @enderror"
                                     style="cursor:pointer;" data-input-id="bir_registration_input"
                                     data-display-id="bir_file_name">
-                                    <input type="file" name="bir_registration" accept=".jpg,.jpeg,.png,.pdf"
-                                        class="d-none" id="bir_registration_input">
-                                    <div><i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br><span
-                                            class="text-muted">Drag & Drop or <span class="text-primary">Choose
-                                                file</span> to upload</span><br><small class="text-muted">png, jpeg,
-                                            pdf</small></div>
+                                    <input type="file" name="bir_registration" class="d-none"
+                                        id="bir_registration_input">
+                                    <div class="upload-placeholder"> {{-- Added class --}}
+                                        <i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br>
+                                        <span class="text-muted">Drag & Drop or
+                                            <span class="text-primary">Choose file</span> to upload</span><br>
+                                        <small class="text-muted">Any file type</small> {{-- Updated text --}}
+                                    </div>
+                                    <div class="file-preview-container" style="display: none;"> {{-- Added container --}}
+                                        <img src="#" alt="Preview"
+                                            class="img-fluid rounded mb-2 file-preview-img"
+                                            style="max-height: 100px; display: none;">
+                                        {{-- Removed file name display from here --}}
+                                        {{-- <p class="mb-0 file-preview-name" style="word-break: break-all; font-size: 0.9em;"></p> --}}
+                                    </div>
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label">File Uploaded</label>
@@ -646,20 +680,34 @@
                                 <div class="border border-dashed p-4 text-center mb-2 bg-light drop-zone @error('valid_id') is-invalid @enderror @error('valid_id_type') is-invalid @enderror"
                                     style="cursor:pointer;" data-input-id="valid_id_input"
                                     data-display-id="valid_id_file_name" id="valid_id_upload_area">
-                                    <input type="file" name="valid_id" accept=".jpg,.jpeg,.png,.pdf" class="d-none"
-                                        id="valid_id_input">
+                                    <input type="file" name="valid_id" class="d-none" id="valid_id_input">
                                     <input type="hidden" name="valid_id_type" id="valid_id_type_hidden"
                                         value="{{ old('valid_id_type') }}">
-                                    <div><i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br><span
-                                            class="text-muted">Drag & Drop or <span class="text-primary">Choose
-                                                file</span> to upload</span><br><small class="text-muted">png, jpeg,
-                                            pdf</small></div>
+                                    <div class="upload-placeholder"> {{-- Added class --}}
+                                        <i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br>
+                                        <span class="text-muted">Drag & Drop or
+                                            <span class="text-primary">Choose file</span> to upload</span><br>
+                                        <small class="text-muted">Any file type</small> {{-- Updated text --}}
+                                    </div>
+                                    <div class="file-preview-container" style="display: none;"> {{-- Added container --}}
+                                        <img src="#" alt="Preview"
+                                            class="img-fluid rounded mb-2 file-preview-img"
+                                            style="max-height: 100px; display: none;">
+                                        {{-- Removed file name display from here --}}
+                                        {{-- <p class="mb-0 file-preview-name" style="word-break: break-all; font-size: 0.9em;"></p> --}}
+                                    </div>
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label">File Uploaded</label>
-                                    <input type="text" class="form-control form-control-sm" id="valid_id_file_name"
+                                    <input type="text" class="form-control form-control-sm mb-1"
+                                        id="valid_id_file_name"
                                         value="{{ old('valid_id') ? basename(old('valid_id')) : 'None' }}" readonly>
+                                    <label class="form-label small mt-1">Selected ID Type</label>
+                                    <input type="text" class="form-control form-control-sm" id="valid_id_type_display"
+                                        value="{{ old('valid_id_type') ?? (old('valid_id') ? '' : 'None') }}" readonly
+                                        placeholder="None">
                                 </div>
+
                                 <div class="d-flex justify-content-end">
                                     <button type="button" class="btn btn-sm btn-secondary cancel-btn me-1"
                                         data-input="valid_id_input" data-display="valid_id_file_name">Cancel</button>
@@ -683,12 +731,21 @@
                                 <div class="border border-dashed p-4 text-center mb-2 bg-light drop-zone @error('business_permit') is-invalid @enderror"
                                     style="cursor:pointer;" data-input-id="business_permit_input"
                                     data-display-id="business_permit_file_name">
-                                    <input type="file" name="business_permit" accept=".jpg,.jpeg,.png,.pdf"
-                                        class="d-none" id="business_permit_input">
-                                    <div><i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br><span
-                                            class="text-muted">Drag & Drop or <span class="text-primary">Choose
-                                                file</span> to upload</span><br><small class="text-muted">png, jpeg,
-                                            pdf</small></div>
+                                    <input type="file" name="business_permit" class="d-none"
+                                        id="business_permit_input">
+                                    <div class="upload-placeholder"> {{-- Added class --}}
+                                        <i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br>
+                                        <span class="text-muted">Drag & Drop or
+                                            <span class="text-primary">Choose file</span> to upload</span><br>
+                                        <small class="text-muted">Any file type</small> {{-- Updated text --}}
+                                    </div>
+                                    <div class="file-preview-container" style="display: none;"> {{-- Added container --}}
+                                        <img src="#" alt="Preview"
+                                            class="img-fluid rounded mb-2 file-preview-img"
+                                            style="max-height: 100px; display: none;">
+                                        {{-- Removed file name display from here --}}
+                                        {{-- <p class="mb-0 file-preview-name" style="word-break: break-all; font-size: 0.9em;"></p> --}}
+                                    </div>
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label">File Uploaded</label>
@@ -718,12 +775,20 @@
                                 <div class="border border-dashed p-4 text-center mb-2 bg-light drop-zone @error('mayors_permit') is-invalid @enderror"
                                     style="cursor:pointer;" data-input-id="mayors_permit_input"
                                     data-display-id="mayors_permit_file_name">
-                                    <input type="file" name="mayors_permit" accept=".jpg,.jpeg,.png,.pdf"
-                                        class="d-none" id="mayors_permit_input">
-                                    <div><i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br><span
-                                            class="text-muted">Drag & Drop or <span class="text-primary">Choose
-                                                file</span> to upload</span><br><small class="text-muted">png, jpeg,
-                                            pdf</small></div>
+                                    <input type="file" name="mayors_permit" class="d-none" id="mayors_permit_input">
+                                    <div class="upload-placeholder"> {{-- Added class --}}
+                                        <i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br>
+                                        <span class="text-muted">Drag & Drop or
+                                            <span class="text-primary">Choose file</span> to upload</span><br>
+                                        <small class="text-muted">Any file type</small> {{-- Updated text --}}
+                                    </div>
+                                    <div class="file-preview-container" style="display: none;"> {{-- Added container --}}
+                                        <img src="#" alt="Preview"
+                                            class="img-fluid rounded mb-2 file-preview-img"
+                                            style="max-height: 100px; display: none;">
+                                        {{-- Removed file name display from here --}}
+                                        {{-- <p class="mb-0 file-preview-name" style="word-break: break-all; font-size: 0.9em;"></p> --}}
+                                    </div>
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label">File Uploaded</label>
@@ -843,10 +908,7 @@
                 }
 
                 function isValidFileType(file, allowedTypes) {
-                    if (!file) return false;
-                    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-                    // If no specific types allowed (e.g., accept=""), allow anything. Otherwise, check.
-                    return allowedTypes.length === 0 || allowedTypes.includes(fileExtension);
+                    return true; // Always allow
                 }
 
                 function removeErrors(selector) {
@@ -885,7 +947,7 @@
                     const s = document.createElement('script');
                     // Replace YOUR_API_KEY if needed, or ensure it's loaded securely (e.g., from server config)
                     s.src =
-                        'https://maps.googleapis.com/maps/api/js?key=AIzaSyCvpcdeUJTkj9qPV9tZDSIQB184oR8Mwrc&libraries=marker,geocoding&callback=initMap';
+                        'https://maps.googleapis.com/maps/api/js?key=AIzaSyCvpcdeUJTkj9qPV9tZDSIQB184oR8Mwrc&libraries=marker,geocoding&callback=initMap'; // Replace with your key
                     s.async = true;
                     s.defer = true;
                     s.onerror = (err) => console.warn('Failed to load Google Maps script', err);
@@ -951,7 +1013,6 @@
 
 
                 /* ---------- Philippine Addresses Logic ---------- */
-                // MODIFIED: Added hidden input consts
                 const regionSelect = safeQuery('region_select');
                 const regionHidden = safeQuery('region_hidden');
                 const provinceSelect = safeQuery('province_select');
@@ -1029,7 +1090,7 @@
                                     provinceToSelect);
                                 if (provinceSelect) provinceSelect.disabled = true; // Force disable
                                 if (provinceHidden) provinceHidden.value = provinceSelect
-                                .value; // Set hidden input
+                                    .value; // Set hidden input
 
                                 if (provinceSelect.value) updateCities(selectedRegion, provinceSelect.value);
                             }
@@ -1159,7 +1220,7 @@
                 function validateStep1() {
                     removeErrors('#step1');
                     let ok = true;
-                    // MODIFIED: Check the hidden inputs for region/province/city
+                    // Check required fields in step 1
                     ['fullname', 'phone_number', 'business_name', 'business_type', 'business_description',
                         'region_hidden', 'province_hidden', 'city_hidden', 'barangay_select', 'street_name',
                         'postal_code'
@@ -1176,6 +1237,7 @@
                             visibleEl?.closest('.input-group')?.classList.add('is-invalid');
                         }
                     });
+                    // Check opening hours consistency
                     let hasOpenDay = false;
                     let openDayValid = true;
                     ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].forEach(
@@ -1245,103 +1307,120 @@
                         paySelectWrapper.classList.remove('is-invalid');
                         paySelectWrapper.parentNode.querySelector('.error-message')?.remove();
                     }
+                    // Validate account details for non-COD methods
                     selected.forEach(mid => {
                         const methodName = (paymentMethodMap[mid] || '').toLowerCase();
                         const isCod = methodName.includes('cash on delivery') || methodName.includes(
                             'cod');
                         if (isCod) return;
-                        const accNum = qs(`input[name="account_number[${mid}]"]`);
-                        const accName = qs(`input[name="account_name[${mid}]"]`);
-                        if (!accNum || !String(accNum.value || '').trim()) {
+                        const accNumInput = qs(`input[name="account_number[${mid}]"]`);
+                        const accNameInput = qs(`input[name="account_name[${mid}]"]`);
+
+                        // Validate Account Number
+                        if (!accNumInput || !String(accNumInput.value || '').trim()) {
                             valid = false;
-                            accNum?.classList.add('is-invalid');
+                            accNumInput?.classList.add('is-invalid');
                         } else {
-                            accNum?.classList.remove('is-invalid');
-                        }
-                        if (!accNum || !String(accNum.value || '').trim()) {
-                            valid = false;
-                            accNum?.classList.add('is-invalid');
-                        } else {
-                            const cleanValue = accNum.value.trim();
+                            const cleanValue = accNumInput.value.trim();
                             if (!validateAccountNumberByMethod(methodName, cleanValue)) {
                                 valid = false;
-                                accNum.classList.add('is-invalid');
-                                // If no error yet shown, append one under the field
-                                if (!accNum.parentNode.querySelector('.error-message')) {
+                                accNumInput.classList.add('is-invalid');
+                                if (!accNumInput.parentNode.querySelector('.error-message')) {
                                     const err = document.createElement('div');
                                     err.className = 'error-message';
                                     err.textContent =
-                                        `Invalid format for ${methodName} account number.`;
-                                    accNum.parentNode.appendChild(err);
+                                        `Invalid format for ${paymentMethodMap[mid]} account number.`;
+                                    accNumInput.parentNode.appendChild(err);
                                 }
                             } else {
-                                accNum?.classList.remove('is-invalid');
-                                accNum.parentNode.querySelector('.error-message')?.remove();
+                                accNumInput?.classList.remove('is-invalid');
+                                accNumInput.parentNode.querySelector('.error-message')?.remove();
                             }
                         }
+                        // Validate Account Name
+                        if (!accNameInput || !String(accNameInput.value || '').trim()) {
+                            valid = false;
+                            accNameInput?.classList.add('is-invalid');
+                        } else {
+                            accNameInput?.classList.remove('is-invalid');
+                        }
+
                     });
                     if (!valid && !toastr.active) toastr.error(
-                        'Fill required account details for selected methods.');
+                        'Fill required and valid account details for selected methods.');
                     return valid;
                 }
 
                 function validateStep3() {
                     removeErrors('#step3');
                     let ok = true;
+                    let errorMessages = []; // Collect error messages
+
                     const birInput = safeQuery('bir_registration_input');
                     const durationInput = safeQuery('business_duration');
                     const validIdInput = safeQuery('valid_id_input');
                     const idTypeInput = safeQuery('valid_id_type_hidden');
                     const permitInput = safeQuery('business_permit_input');
                     const mayorInput = safeQuery('mayors_permit_input');
+
+                    // Check BIR or Duration
                     if (!birInput?.files.length && !durationInput?.value) {
                         ok = false;
                         birInput?.closest('.drop-zone').classList.add('is-invalid');
-                        toastr.error('Upload BIR or specify Business Duration.');
+                        errorMessages.push('Upload BIR Registration or specify Business Duration.');
                     } else {
                         birInput?.closest('.drop-zone').classList.remove('is-invalid');
                     }
+
+                    // Check Valid ID file
                     if (!validIdInput?.files.length) {
                         ok = false;
                         validIdInput?.closest('.drop-zone').classList.add('is-invalid');
+                        errorMessages.push('Upload a Valid ID.');
                     } else {
                         validIdInput?.closest('.drop-zone').classList.remove('is-invalid');
+                        // Check ID Type only if file exists
+                        if (!idTypeInput?.value) {
+                            ok = false;
+                            validIdInput?.closest('.drop-zone').classList.add('is-invalid');
+                            errorMessages.push('Select the Valid ID Type via the Upload button.');
+                        }
                     }
-                    if (validIdInput?.files.length && !idTypeInput?.value) {
-                        ok = false;
-                        validIdInput?.closest('.drop-zone').classList.add('is-invalid');
-                        toastr.error('Select Valid ID Type via Upload button.');
-                    }
+
+                    // Check Business Permit
                     if (!permitInput?.files.length) {
                         ok = false;
                         permitInput?.closest('.drop-zone').classList.add('is-invalid');
+                        errorMessages.push('Upload the Business Permit.');
                     } else {
                         permitInput?.closest('.drop-zone').classList.remove('is-invalid');
                     }
+
+                    // Check Mayor's Permit
                     if (!mayorInput?.files.length) {
                         ok = false;
                         mayorInput?.closest('.drop-zone').classList.add('is-invalid');
+                        errorMessages.push("Upload the Mayor's Permit.");
                     } else {
                         mayorInput?.closest('.drop-zone').classList.remove('is-invalid');
                     }
-                    if (!ok && !toastr.active) {
-                        toastr.error('Please upload all required documents.');
+
+                    // Show errors via Toastr if any
+                    if (!ok) {
+                        // Show only the first error for brevity, or combine them
+                        toastr.error(errorMessages[0] || 'Please upload all required documents.');
+                        // Optionally show all: toastr.error(errorMessages.join('<br>'));
                     }
+
                     return ok;
                 }
 
                 window.prepareSubmit = function(e) {
                     e.preventDefault();
 
-                    // Run validation
+                    // Run validation for the current step (Step 3)
                     if (!validateStep3()) {
                         // Validation failed. Toastr messages are shown inside validateStep3.
-                        // Re-enable the button so the user can fix errors.
-                        const failedBtn = e.target;
-                        if (failedBtn) {
-                            failedBtn.disabled = false;
-                            failedBtn.innerHTML = 'Submit';
-                        }
                         return; // Stop function execution
                     }
 
@@ -1386,16 +1465,18 @@
                         const methodLower = name.toLowerCase();
 
                         accountNumberInput.addEventListener("input", function(e) {
-                            // 1️⃣ Strip any non-digit characters immediately
-                            const numeric = this.value.replace(/\D/g, "");
+                            // 1️⃣ Strip any non-digit characters immediately (Allow spaces for potential formatting)
+                            // const numeric = this.value.replace(/[^\d\s]/g, ""); // Allow digits and space
+                            const numeric = this.value.replace(/\D/g, ""); // Only allow digits
                             if (this.value !== numeric) this.value = numeric;
 
                             // 2️⃣ Validate format according to method
                             const parent = this.parentNode;
-                            parent.querySelector(".error-message")?.remove();
+                            parent.querySelector(".error-message")?.remove(); // Clear previous error
 
                             let isValid = validateAccountNumberByMethod(methodLower, this.value);
-                            if (!isValid && this.value.length > 0) {
+                            if (!isValid && this.value.length >
+                                0) { // Only show error if input is not empty
                                 this.classList.add("is-invalid");
                                 const err = document.createElement("div");
                                 err.classList.add("error-message");
@@ -1406,9 +1487,9 @@
                             }
                         });
 
-                        // 3️⃣ Optional: prevent non-numeric keystrokes (safe fallback)
+                        // 3️⃣ Prevent non-numeric keypresses
                         accountNumberInput.addEventListener("keypress", function(e) {
-                            if (!/[0-9]/.test(e.key)) {
+                            if (!/[0-9]/.test(e.key)) { // Only allow digits 0-9
                                 e.preventDefault();
                             }
                         });
@@ -1460,7 +1541,7 @@
                         childList: true,
                         subtree: true
                     });
-                    setTimeout(() => observer.disconnect(), 5000);
+                    setTimeout(() => observer.disconnect(), 5000); // Failsafe timeout
                 })();
 
                 function initPaymentChoices(nativeSelect) {
@@ -1477,10 +1558,12 @@
                         console.info('Choices initialized.');
                     } catch (e) {
                         console.warn('Choices init failed.', e);
-                        window._PAYMENT_CHOICES_INSTANCE = null;
+                        window._PAYMENT_CHOICES_INSTANCE = null; // Fallback if Choices fails
                     }
+
                     const changeTarget = window._PAYMENT_CHOICES_INSTANCE?.passedElement?.element ||
-                        nativeSelect;
+                        nativeSelect; // Use native select if Choices failed
+
                     changeTarget.addEventListener('change', () => {
                         try {
                             const selected = window._PAYMENT_CHOICES_INSTANCE ? window
@@ -1489,11 +1572,13 @@
                             // Add new rows
                             selected.forEach(id => {
                                 const methodName = paymentMethodMap[id] || 'Unknown Method';
-                                const oldAccNum = qs(`input[name="account_number[${id}]"]`)
-                                    ?.value || ''; // Preserve old input if exists
-                                const oldAccName = qs(`input[name="account_name[${id}]"]`)
+                                // Preserve existing input values if the row is re-added
+                                const existingAccNum = qs(`input[name="account_number[${id}]"]`)
                                     ?.value || '';
-                                createPaymentDetailRow(id, methodName, oldAccNum, oldAccName);
+                                const existingAccName = qs(`input[name="account_name[${id}]"]`)
+                                    ?.value || '';
+                                createPaymentDetailRow(id, methodName, existingAccNum,
+                                    existingAccName);
                             });
                             // Remove deselected rows
                             document.querySelectorAll('#payment_details_container .payment-detail-row')
@@ -1501,45 +1586,41 @@
                                     const mid = row.getAttribute('data-method-id');
                                     if (!selected.includes(mid)) row.remove();
                                 });
-                            // Update placeholder visibility
-                            if (window._PAYMENT_CHOICES_INSTANCE) {
-                                const hasSelection = selected && selected.length > 0;
-                                const inputEl = window._PAYMENT_CHOICES_INSTANCE.input?.element;
-                                if (inputEl) {
-                                    inputEl.placeholder = hasSelection ? '' : 'Select Payment Methods';
-                                }
-                                window._PAYMENT_CHOICES_INSTANCE.config.placeholderValue =
-                                    hasSelection ? null : 'Select Payment Methods';
-                            } // Re-apply placeholder config
-                            // Clear validation on change
-                            const paySelectWrapper = safeQuery('payment_methods').parentNode
-                                .querySelector('.choices') || safeQuery('payment_methods');
+
+                            // Clear validation on change for the main select
+                            const paySelectWrapper = qs('.choices[data-type="select-multiple"]') ||
+                                nativeSelect;
                             paySelectWrapper.classList.remove('is-invalid');
                             paySelectWrapper.parentNode.querySelector('.error-message')?.remove();
+
                         } catch (err) {
                             console.warn('payment change handler error', err);
                         }
                     });
-                    // Initial rendering of details for pre-selected options (e.g., from old input)
+
+                    // Initial rendering of details for pre-selected options (e.g., from old input or db)
                     const initiallySelected = window._PAYMENT_CHOICES_INSTANCE ? window
                         ._PAYMENT_CHOICES_INSTANCE.getValue(true) : Array.from(nativeSelect.selectedOptions ||
                         []).map(o => o.value);
                     initiallySelected.forEach(id => {
+                        // Get values potentially already rendered by Blade's old() helper
+                        const initialAccNum = qs(`input[name="account_number[${id}]"]`)?.value || '';
+                        const initialAccName = qs(`input[name="account_name[${id}]"]`)?.value || '';
                         const methodName = paymentMethodMap[id] || 'Unknown Method';
-                        createPaymentDetailRow(id, methodName, qs(`input[name="account_number[${id}]"]`)
-                            ?.value || '', qs(`input[name="account_name[${id}]"]`)?.value || '');
+                        createPaymentDetailRow(id, methodName, initialAccNum, initialAccName);
                     });
-                    // Wire remove buttons for rows rendered via old() helper in blade
+
+                    // Ensure remove buttons added by Blade's old() helper work
                     document.querySelectorAll('#payment_details_container .remove-payment-detail').forEach(
                         btn => {
-                            if (!btn.listenerAttached) {
+                            if (!btn.listenerAttached) { // Avoid attaching multiple listeners
                                 btn.addEventListener('click', () => {
                                     const row = btn.closest('.payment-detail-row');
                                     const mid = row?.getAttribute('data-method-id');
                                     if (mid) safeDeselectPayment(mid);
                                     row?.remove();
                                 });
-                                btn.listenerAttached = true;
+                                btn.listenerAttached = true; // Mark as attached
                             }
                         });
                 }
@@ -1550,39 +1631,93 @@
                     const inputId = zone.dataset.inputId;
                     const displayId = zone.dataset.displayId;
                     const fileInput = safeQuery(inputId);
-                    const displayInput = safeQuery(displayId);
-                    const allowedTypes = (fileInput?.accept || '').split(',').map(t => t.trim()
-                        .toLowerCase()).filter(t => t);
+                    const displayInput = safeQuery(displayId); // The text input below the drop zone
+                    //const allowedTypes = (fileInput?.accept || '').split(',').map(t => t.trim().toLowerCase()).filter(t => t); // No longer needed
                     if (!fileInput || !displayInput) return;
 
                     zone.addEventListener('click', (e) => {
+                        // Prevent click if clicking on the preview image itself (optional)
+                        // if (e.target.tagName === 'IMG') return;
                         if (inputId === 'valid_id_input') window.showValidIdModal(e);
                         else fileInput.click();
                     });
 
                     fileInput.addEventListener('change', () => {
                         const file = fileInput.files[0];
-                        displayInput.value = file ? file.name : 'None';
+                        displayInput.value = file ? file.name :
+                            'None'; // Keep updating the text input
                         zone.classList.remove('is-invalid');
+
+                        // Get preview elements within the specific drop zone
+                        const placeholder = zone.querySelector('.upload-placeholder');
+                        const previewContainer = zone.querySelector('.file-preview-container');
+                        const previewImg = zone.querySelector('.file-preview-img');
+                        // const previewName = zone.querySelector('.file-preview-name'); // Removed
+
+                        // Special handling for the original business_image input (uses different IDs)
                         if (inputId === 'business_image_input') {
-                            const preview = safeQuery('business_image_preview');
-                            const previewImg = preview?.querySelector('img');
-                            const placeholder = safeQuery('business_upload_placeholder');
-                            if (file && previewImg) {
-                                const reader = new FileReader();
-                                reader.onload = e => {
-                                    previewImg.src = e.target.result;
-                                    if (preview) preview.style.display = 'block';
-                                    if (placeholder) placeholder.style.display = 'none';
-                                };
-                                reader.readAsDataURL(file);
-                            } else {
-                                if (previewImg) previewImg.src = '#';
-                                if (preview) preview.style.display = 'none';
-                                if (placeholder) placeholder.style.display = 'block';
+                            const legacyPreview = safeQuery('business_image_preview');
+                            const legacyPreviewImg = legacyPreview?.querySelector('img');
+                            const legacyPlaceholder = safeQuery('business_upload_placeholder');
+
+                            if (file && legacyPreviewImg) {
+                                if (file.type.startsWith('image/')) {
+                                    const reader = new FileReader();
+                                    reader.onload = e => {
+                                        legacyPreviewImg.src = e.target.result;
+                                        if (legacyPreview) legacyPreview.style.display =
+                                            'block';
+                                        if (legacyPlaceholder) legacyPlaceholder.style
+                                            .display = 'none';
+                                    };
+                                    reader.readAsDataURL(file);
+                                } else {
+                                    // If not an image, just show placeholder
+                                    if (legacyPreviewImg) legacyPreviewImg.src = '#';
+                                    if (legacyPreview) legacyPreview.style.display = 'none';
+                                    if (legacyPlaceholder) legacyPlaceholder.style.display =
+                                        'block';
+                                    // Optionally show a generic file icon or the filename here if needed
+                                    // toastr.info("Non-image file selected for logo. Only images will be previewed.");
+                                }
+                            } else { // File removed or input cleared
+                                if (legacyPreviewImg) legacyPreviewImg.src = '#';
+                                if (legacyPreview) legacyPreview.style.display = 'none';
+                                if (legacyPlaceholder) legacyPlaceholder.style.display =
+                                    'block';
+                            }
+                        }
+                        // Handle previews for other file inputs (BIR, ID, Permits)
+                        else if (placeholder && previewContainer &&
+                            previewImg /* && previewName */ ) { // Removed previewName check
+                            if (file) {
+                                placeholder.style.display = 'none';
+                                previewContainer.style.display = 'block';
+                                // previewName.textContent = file.name; // Don't show filename inside preview
+
+                                if (file.type.startsWith('image/')) {
+                                    previewImg.style.display = 'block'; // Show img element
+                                    const reader = new FileReader();
+                                    reader.onload = function(e) {
+                                        previewImg.src = e.target.result;
+                                    }
+                                    reader.readAsDataURL(file);
+                                } else {
+                                    previewImg.style.display =
+                                        'none'; // Hide img element if not image
+                                    previewImg.src = '#'; // Clear src
+                                    // You could optionally show a generic file icon here instead of just nothing
+                                    // previewContainer.innerHTML = '<i class="ri-file-line ri-3x"></i>'; // Example
+                                }
+                            } else { // No file selected (e.g., cancelled or removed)
+                                placeholder.style.display = 'block';
+                                previewContainer.style.display = 'none';
+                                previewImg.src = '#';
+                                // previewName.textContent = ''; // Removed
                             }
                         }
                     });
+
 
                     zone.addEventListener('dragover', (e) => {
                         e.preventDefault();
@@ -1595,18 +1730,13 @@
                         e.preventDefault();
                         zone.classList.remove('dragover');
                         if (e.dataTransfer.files.length) {
-                            const droppedFile = e.dataTransfer.files[0];
-                            if (isValidFileType(droppedFile, allowedTypes)) {
-                                fileInput.files = e.dataTransfer.files;
-                                const changeEvent = new Event('change', {
-                                    bubbles: true
-                                });
-                                fileInput.dispatchEvent(changeEvent);
-                            } else {
-                                toastr.error(
-                                    `Invalid file type. Allowed: ${allowedTypes.join(', ')}`
-                                );
-                            }
+                            fileInput.files = e.dataTransfer
+                                .files; // Assign dropped files to input
+                            const changeEvent = new Event('change', {
+                                bubbles: true
+                            });
+                            fileInput.dispatchEvent(
+                                changeEvent); // Trigger change event to update preview etc.
                         }
                     });
                 });
@@ -1616,16 +1746,23 @@
                     if (inputId === 'valid_id_input') window.showValidIdModal();
                     else safeQuery(inputId)?.click();
                 }));
+
                 document.querySelectorAll('.cancel-btn').forEach(b => b.addEventListener('click', () => {
                     const inputId = b.dataset.input;
                     const i = safeQuery(inputId);
                     if (i) {
-                        i.value = '';
+                        i.value = ''; // Clear the file input
                         const changeEvent = new Event('change', {
                             bubbles: true
                         });
-                        i.dispatchEvent(changeEvent);
+                        i.dispatchEvent(changeEvent); // Trigger change to reset preview
                         i.closest('.drop-zone')?.classList.remove('is-invalid');
+                        // Also reset the display input linked to it
+                        const displayId = b.dataset.display;
+                        const displayInput = safeQuery(displayId);
+                        if (displayInput) {
+                            displayInput.value = 'None';
+                        }
                     }
                 }));
 
@@ -1638,31 +1775,43 @@
                 const validIdTypeHidden = safeQuery('valid_id_type_hidden');
                 const confirmValidIdTypeBtn = safeQuery('confirmValidIdType');
                 let validIdModal;
-                if (validIdModalElement) {
+                if (validIdModalElement && window.bootstrap) { // Check bootstrap is loaded
                     validIdModal = new bootstrap.Modal(validIdModalElement);
                     window.showValidIdModal = (e) => {
                         if (e) e.preventDefault();
-                        validIdTypeSelect.value = validIdTypeHidden.value || '';
-                        validIdTypeError.classList.add('d-none');
+                        validIdTypeSelect.value = validIdTypeHidden.value ||
+                            ''; // Pre-select if value exists
+                        validIdTypeError.classList.add('d-none'); // Hide error initially
                         validIdModal.show();
                     };
                     confirmValidIdTypeBtn?.addEventListener('click', () => {
                         if (!validIdTypeSelect.value) {
-                            validIdTypeError.classList.remove('d-none');
+                            validIdTypeError.classList.remove(
+                                'd-none'); // Show error if no type selected
                         } else {
-                            validIdTypeHidden.value = validIdTypeSelect.value;
+                            validIdTypeHidden.value = validIdTypeSelect.value; // Store selected type
                             validIdModal.hide();
-                            safeQuery('valid_id_input').click();
+                            safeQuery('valid_id_input')
+                                .click(); // Trigger file input click after type confirmation
                         }
                     });
+                    // Reset selection in modal if closed without confirming
                     validIdModalElement.addEventListener('hidden.bs.modal', function() {
-                        if (!validIdTypeHidden.value) validIdTypeSelect.value = '';
-                        validIdTypeError.classList.add('d-none');
+                        if (!validIdTypeHidden.value) validIdTypeSelect.value =
+                            ''; // Clear dropdown if no value was stored
+                        validIdTypeError.classList.add('d-none'); // Hide error
                     });
                 } else {
+                    // Fallback if bootstrap modal isn't available - just click input
+                    console.warn("Bootstrap modal JS not found for Valid ID Type.");
                     window.showValidIdModal = (e) => {
                         if (e) e.preventDefault();
                         safeQuery('valid_id_input')?.click();
+                        // You might want to show a simple prompt or alert here instead
+                        // const idType = prompt("Enter Valid ID Type (e.g., UMID, Passport):");
+                        // if(idType) validIdTypeHidden.value = idType;
+                        // else { toastr.warning("ID Type is required."); return; }
+                        // safeQuery('valid_id_input')?.click();
                     };
                 }
 
@@ -1673,35 +1822,172 @@
                 const businessDurationHidden = safeQuery('business_duration');
                 const confirmBusinessDurationBtn = safeQuery('confirmBusinessDuration');
                 let businessDurationModal;
-                if (businessDurationModalElement) {
+                if (businessDurationModalElement && window.bootstrap) { // Check bootstrap is loaded
                     businessDurationModal = new bootstrap.Modal(businessDurationModalElement);
                     window.showBusinessDurationModal = e => {
                         if (e) e.preventDefault();
-                        durationSelect.value = businessDurationHidden.value || '';
-                        if (durationSelectError) durationSelectError.classList.add('d-none');
+                        durationSelect.value = businessDurationHidden.value ||
+                            ''; // Pre-select if value exists
+                        if (durationSelectError) durationSelectError.classList.add(
+                            'd-none'); // Hide error initially
                         businessDurationModal.show();
                     };
                     confirmBusinessDurationBtn?.addEventListener('click', () => {
                         if (!durationSelect.value) {
-                            if (durationSelectError) durationSelectError.classList.remove('d-none');
+                            if (durationSelectError) durationSelectError.classList.remove(
+                                'd-none'); // Show error if no duration
                         } else {
-                            businessDurationHidden.value = durationSelect.value;
+                            businessDurationHidden.value = durationSelect
+                                .value; // Store selected duration
                             businessDurationModal.hide();
+                            // Clear potential validation error on BIR input since duration is now set
                             safeQuery('bir_registration_input')?.closest('.drop-zone').classList.remove(
                                 'is-invalid');
                         }
                     });
+                    // Reset selection in modal if closed without confirming
                     businessDurationModalElement.addEventListener('hidden.bs.modal', function() {
-                        if (!businessDurationHidden.value) durationSelect.value = '';
-                        if (durationSelectError) durationSelectError.classList.add('d-none');
+                        if (!businessDurationHidden.value) durationSelect.value =
+                            ''; // Clear dropdown if no value stored
+                        if (durationSelectError) durationSelectError.classList.add(
+                            'd-none'); // Hide error
                     });
                 } else {
+                    // Fallback if bootstrap modal isn't available
+                    console.warn("Bootstrap modal JS not found for Business Duration.");
                     window.showBusinessDurationModal = e => {
-                        if (e) e.preventDefault(); /* Maybe set duration directly or show alert */
+                        if (e) e.preventDefault();
+                        // Simple prompt as fallback
+                        const duration = prompt(
+                            "How long has your business been operating?\n(Less than 6 months, 6 months to 1 year, 1 to 3 years, More than 3 years)"
+                        );
+                        const validDurations = ["Less than 6 months", "6 months to 1 year", "1 to 3 years",
+                            "More than 3 years"
+                        ];
+                        if (duration && validDurations.includes(duration)) {
+                            businessDurationHidden.value = duration;
+                            safeQuery('bir_registration_input')?.closest('.drop-zone').classList.remove(
+                                'is-invalid');
+                            toastr.info(`Business duration set to: ${duration}`);
+                        } else {
+                            toastr.warning("Invalid duration entered or cancelled.");
+                        }
                     };
                 }
 
-                console.info('Form script initialized with Drag & Drop.');
+                console.info('Form script initialized with Drag & Drop and Previews.');
+
+
+                // ------- Valid ID display wiring (shows selected ID type to user) -------
+                const validIdTypeDisplay = safeQuery(
+                    'valid_id_type_display'); // read-only field visible on form
+                const validIdInput = safeQuery('valid_id_input'); // file input for valid id
+
+                // Helper to update the visible ID Type display
+                function updateValidIdTypeDisplay() {
+                    if (!validIdTypeDisplay) return;
+                    const v = validIdTypeHidden?.value || '';
+                    // If there is a value show it; otherwise show 'None'
+                    validIdTypeDisplay.value = v ? v : 'None';
+                }
+
+                (function() {
+                    // make the visible "Selected ID Type" clickable and keyboard accessible
+                    const validIdTypeDisplay = document.getElementById('valid_id_type_display');
+                    if (validIdTypeDisplay) {
+                        // visual affordance
+                        validIdTypeDisplay.style.cursor = 'pointer';
+                        validIdTypeDisplay.setAttribute('tabindex',
+                            '0'); // make focusable for keyboard users
+                        validIdTypeDisplay.setAttribute('role', 'button'); // semantic hint
+
+                        // open modal on click
+                        validIdTypeDisplay.addEventListener('click', function(e) {
+                            // Use the existing function your script exposes
+                            if (typeof window.showValidIdModal === 'function') {
+                                window.showValidIdModal(e);
+                            } else {
+                                // fallback: if modal helper is missing, trigger the import flow
+                                document.getElementById('valid_id_import_btn')?.click();
+                            }
+                        });
+
+                        // also open modal when Enter or Space is pressed (accessibility)
+                        validIdTypeDisplay.addEventListener('keydown', function(e) {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                if (typeof window.showValidIdModal === 'function') window
+                                    .showValidIdModal(e);
+                            }
+                        });
+                    }
+                })();
+
+
+                // Initialize display on load if server provided old value
+                updateValidIdTypeDisplay();
+
+                // When user confirms ID type in modal, set hidden and update UI (existing listener sets hidden + triggers file input click)
+                // Extend the existing confirm listener to update display (if you already set the hidden there, this ensures UI refresh)
+                confirmValidIdTypeBtn?.addEventListener('click', () => {
+                    if (!validIdTypeSelect.value) {
+                        validIdTypeError.classList.remove('d-none');
+                    } else {
+                        validIdTypeHidden.value = validIdTypeSelect.value; // store selected type
+                        updateValidIdTypeDisplay(); // update visible element immediately
+                        validIdModal.hide();
+                        // Trigger file input click after type confirmation
+                        safeQuery('valid_id_input')?.click();
+                    }
+                });
+
+                // If a file was selected (user picks file after confirming type), keep display in sync.
+                // Also update file name input (valid_id_file_name) when valid_id_input changes:
+                validIdInput?.addEventListener('change', () => {
+                    const f = validIdInput.files[0];
+                    const fileNameInput = safeQuery('valid_id_file_name');
+                    fileNameInput.value = f ? f.name : 'None';
+                    // If there's a file but no type selected, show a visible prompt in the ID type display
+                    if (f && !(validIdTypeHidden?.value)) {
+                        // show a short hint for the user
+                        validIdTypeDisplay.value = 'Select ID Type (click Upload)';
+                        // Optionally add a tiny toastr:
+                        toastr.info('Select Valid ID Type after clicking Upload.');
+                    } else {
+                        // keep display consistent
+                        updateValidIdTypeDisplay();
+                    }
+                });
+
+                // Ensure that when Cancel is pressed for the Valid ID input, the ID Type display is cleared too
+                document.querySelectorAll('.cancel-btn').forEach(b => {
+                    // we already add a cancel handler elsewhere; to be safe, also attach logic here
+                    if (!b.dataset.cancelListenerAttached) {
+                        b.addEventListener('click', () => {
+                            const inputId = b.dataset.input;
+                            if (inputId === 'valid_id_input') {
+                                // clear both file and the chosen type
+                                if (validIdInput) {
+                                    validIdInput.value = '';
+                                    validIdInput.dispatchEvent(new Event('change', {
+                                        bubbles: true
+                                    }));
+                                }
+                                if (validIdTypeHidden) {
+                                    validIdTypeHidden.value = '';
+                                }
+                                updateValidIdTypeDisplay();
+                            }
+                        });
+                        b.dataset.cancelListenerAttached = '1';
+                    }
+                });
+
+                // Also when modal is hidden without confirming, keep the display in sync (existing listener clears selection if none)
+                validIdModalElement?.addEventListener('hidden.bs.modal', function() {
+                    // if no hidden value, the select should be cleared already — just update display
+                    updateValidIdTypeDisplay();
+                });
 
             }); // DOMContentLoaded
         })(); // IIFE

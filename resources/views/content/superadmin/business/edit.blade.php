@@ -310,7 +310,6 @@
                 return;
             }
             const s = document.createElement('script');
-            // NOTE: Replace 'YOUR_GOOGLE_MAPS_API_KEY' with the actual key from your environment
             s.src =
                 'https://maps.googleapis.com/maps/api/js?key=AIzaSyCvpcdeUJTkj9qPV9tZDSIQB184oR8Mwrc&libraries=geocoding&callback=initMap';
             s.async = true;

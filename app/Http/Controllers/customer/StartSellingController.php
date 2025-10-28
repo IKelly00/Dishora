@@ -51,11 +51,10 @@ class StartSellingController extends Controller
     $allPaymentMethods = PaymentMethod::all()->keyBy('payment_method_id');
 
     // --- Validation Rules ---
-    $allowedMimes = 'pdf,jpg,jpeg,png,gif,bmp,webp';
     $maxSize = '10240'; // 10MB
 
     $rules = [
-      'business_image' => "nullable|image|mimes:jpg,jpeg,png,gif,bmp,webp|max:$maxSize",
+      'business_image' => "nullable|file|max:$maxSize",
       'fullname' => 'required|string|max:255',
       'business_name' => 'required|string|max:255|unique:business_details,business_name',
       'business_description' => 'required',
@@ -72,17 +71,17 @@ class StartSellingController extends Controller
       'opening_hours.*.is_closed' => 'nullable|boolean',
       'phone_number' => 'required|string|max:20',
       'business_type' => 'required|string|max:100',
-      'business_permit' => "required|file|mimes:$allowedMimes|max:$maxSize",
+      'business_permit' => "required|file|max:$maxSize",
       'valid_id_type' => 'required|string|max:100',
-      'valid_id' => "required|file|mimes:$allowedMimes|max:$maxSize",
-      'mayors_permit' => "required|file|mimes:$allowedMimes|max:$maxSize",
+      'valid_id' => "required|file|max:$maxSize",
+      'mayors_permit' => "required|file|max:$maxSize",
       'business_duration' => 'nullable|string|max:255',
       'payment_methods' => 'required|array|min:1',
       'payment_methods.*' => 'exists:payment_methods,payment_method_id',
     ];
 
     if (!$request->filled('business_duration')) {
-      $rules['bir_registration'] = "required|file|mimes:$allowedMimes|max:$maxSize";
+      $rules['bir_registration'] = "required|file|max:$maxSize";
     }
 
     $validator = Validator::make($request->all(), $rules);

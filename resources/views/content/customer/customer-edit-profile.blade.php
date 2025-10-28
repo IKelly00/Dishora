@@ -296,9 +296,8 @@
         };
     </script>
 
-    {{-- Load Google Maps for Geocoding (replace YOUR_GOOGLE_MAPS_API_KEY) --}}
     <script async defer
-        src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places&callback=initGeocoder">
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCvpcdeUJTkj9qPV9tZDSIQB184oR8Mwrc&libraries=places&callback=initGeocoder">
     </script>
 
     {{-- Image upload + dropzone --}}
