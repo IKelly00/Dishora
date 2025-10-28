@@ -13,7 +13,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}" />
 
     {{-- Optional: Uncomment to force HTTPS for assets --}}
-    {{-- <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests"> --}}
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 
     <!-- Canonical SEO -->
     <link rel="canonical" href="{{ config('variables.productPage', '') }}" />
