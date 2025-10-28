@@ -45,7 +45,7 @@
     {
       "url": "/business/edit/",
       "name": "Business Details",
-      "icon": "menu-icon tf-icons ri-calendar-event-line",
+      "icon": "menu-icon tf-icons ri-store-2-line",
       "slug": "vendor.business.edit"
     },
     {
