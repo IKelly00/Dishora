@@ -25,6 +25,7 @@ use App\Http\Controllers\vendor\PreorderOrderController;
 use App\Http\Controllers\vendor\PendingOrderController;
 use App\Http\Controllers\vendor\VendorScheduleController;
 use App\Http\Controllers\vendor\VendorReviewController;
+use App\Http\Controllers\vendor\VendorBusinessDetail;
 
 
 // Customer Controllers
@@ -242,6 +243,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
       Route::get('vendor/messages', [VendorMenuController::class, 'messages'])->name('vendor.messages');
       Route::get('/vendor/messages/thread', [VendorMenuController::class, 'getMessageThread'])->name('vendor.messages.thread');
       Route::post('/vendor/messages/send', [VendorMenuController::class, 'sendMessage'])->name('vendor.messages.send');
+
+      // Business Detail
+      Route::get('/business/edit/{business_id?}', [VendorBusinessDetail::class, 'edit'])->name('vendor.business.edit');
+      Route::post('/business/update/{business_id?}', [VendorBusinessDetail::class, 'update'])->name('vendor.business.update');
     });
   });
 

@@ -17,6 +17,13 @@ class BusinessPaymentMethod extends Model
     'payment_method_id',
   ];
 
+  public function details()
+  {
+    // Assumes App\Models\BusinessPmDetail model exists
+    // This links one pivot record to one detail record.
+    return $this->hasOne(BusinessPmDetail::class, 'business_payment_method_id', 'business_payment_method_id');
+  }
+
   /**
    * Relationship: Has many BusinessPmDetail records.
    */
