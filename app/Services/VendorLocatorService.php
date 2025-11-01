@@ -49,12 +49,31 @@ class VendorLocatorService
         vendors.registration_status,
         vendors.created_at,
         (6371 * acos(
-            cos(radians(?)) *
+    -- This CASE statement "clamps" the value between -1.0 and 1.0
+    CASE
+        WHEN (
+            cos(radians(13.6211001)) *
             cos(radians(business_details.latitude)) *
-            cos(radians(business_details.longitude) - radians(?)) +
-            sin(radians(?)) *
+            cos(radians(business_details.longitude) - radians(123.20525360000001)) +
+            sin(radians(13.6211001)) *
             sin(radians(business_details.latitude))
-        )) AS distance
+        ) > 1.0 THEN 1.0
+        WHEN (
+            cos(radians(13.6211001)) *
+            cos(radians(business_details.latitude)) *
+            cos(radians(business_details.longitude) - radians(123.20525360000001)) +
+            sin(radians(13.6211001)) *
+            sin(radians(business_details.latitude))
+        ) < -1.0 THEN -1.0
+        ELSE (
+            cos(radians(13.6211001)) *
+            cos(radians(business_details.latitude)) *
+            cos(radians(business_details.longitude) - radians(123.20525360000001)) +
+            sin(radians(13.6211001)) *
+            sin(radians(business_details.latitude))
+        )
+    END
+)) AS distance
     FROM business_details
     JOIN vendors ON vendors.vendor_id = CAST(business_details.vendor_id AS BIGINT)
     WHERE vendors.registration_status = \'Approved\'
