@@ -233,17 +233,27 @@ class CheckoutPreorderController extends Controller
     ]);
     $deliveryData['user_id'] = $user->user_id;
     $deliveryData['payment_option'] = $request->payment_option;
-    $deliveryData['requires_receipt'] = true;
+
     $deliveryData['order_type'] = $request->input('order_type');
 
     $pmId = $request->payment_method;
     $pm = PaymentMethod::findOrFail($pmId);
     $methodName = strtolower(trim($pm->method_name));
     $isCod = in_array($methodName, ['cash', 'cod', 'card on delivery']);
+
+    // Determine if this preorder needs an official receipt
+    if ($totalAdvanceRequired > 0 || !$isCod) {
+      // Requires receipt when paid online or when advance payment exists
+      $deliveryData['requires_receipt'] = true;
+    } else {
+      // Pure COD with no advance payment => no receipt at checkout time
+      $deliveryData['requires_receipt'] = false;
+    }
+
     $itemNotes = $request->input('item_notes', []);
 
     // If COD chosen but advances required -> try to override to GCash
-    if ($isCod && $totalAdvanceRequired > 0) {
+    if ($isCod && $totalAdvanceRequired <= 0 && !$deliveryData['requires_receipt']) {
       Log::info('COD chosen while advances required; attempting to override payment method', [
         'method' => __METHOD__,
         'user_id' => $user->user_id,
