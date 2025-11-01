@@ -37,7 +37,7 @@ class OrdersController extends Controller
       ->paginate(10);
 
     $orders->getCollection()->transform(function ($order) use ($user) {
-      // ✅ Determine item-level statuses
+      // Determine item-level statuses
       $statuses = $order->items->pluck('order_item_status')
         ->map(fn($s) => ucfirst(strtolower(trim((string)$s))))
         ->unique()
@@ -49,7 +49,7 @@ class OrdersController extends Controller
       $hasPending     = $statuses->contains('Pending');
       $hasCancelled   = $statuses->contains('Cancelled');
 
-      // ✅ Order-level status (priority)
+      // Order-level status (priority)
       if ($hasForDelivery) {
         $order->order_status = 'For Delivery';
       } elseif (($hasPreparing || $hasCompleted) && $hasPending) {
@@ -79,13 +79,21 @@ class OrdersController extends Controller
       $order->all_pending = $order->items->every(fn($it) => trim($it->order_item_status ?? '') === 'Pending');
 
       // Check Preorders (receipt logic applies only for Preorders)
+      // Check Preorders (receipt logic applies only for Preorders)
       if ($isPreorder) {
 
-        // ✅ HERE IS THE FIX:
-        // Changed is_null() to empty() to catch both NULL and empty strings ''.
-        $order->needs_receipt = !empty($order->preorderDetail) && empty($order->preorderDetail->receipt_url);
+        // Loop through all order_items: stop as soon as one needs advance
+        $hasAdvanceRequired = $order->items->contains(function ($item) {
+          $product = $item->product ?? null;
+          return $product && (float)($product->advance_amount ?? 0) > 0;
+        });
+
+        // needs_receipt true if any item requires advance and receipt not yet uploaded
+        $order->needs_receipt = $hasAdvanceRequired
+          && !empty($order->preorderDetail)
+          && empty($order->preorderDetail->receipt_url);
       } else {
-        // regular cart orders never have receipts
+        // Regular orders (non-preorder) never require receipts
         $order->needs_receipt = false;
       }
 
