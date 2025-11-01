@@ -45,12 +45,22 @@
                 @csrf
                 <input type="hidden" name="business_id" value="{{ $business_id }}">
 
+                {{-- === NEW: Order Type Hidden Input === --}}
+                <input type="hidden" name="order_type" id="order_type" value="delivery">
+
+                {{-- === NEW: Delivery/Pickup Toggle === --}}
+                <div class="order-type-toggle" role="group">
+                    <button type="button" class="btn active" id="btn-delivery">Delivery</button>
+                    <button type="button" class="btn" id="btn-pickup">Pickup</button>
+                </div>
+
                 {{-- === DELIVERY INFORMATION & ADDRESS === --}}
                 <div class="checkout-section mb-4">
-                    <h5 class="fw-bold text-dark mb-3">Delivery Information</h5>
+                    {{-- ID fixed --}}
+                    <h5 class="fw-bold text-dark mb-3" id="delivery-info-title">Delivery Information</h5>
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="form-label">Delivery Date</label>
+                            <label class="form-label" id="delivery-date-label">Delivery Date</label>
                             <button type="button" class="form-control btn btn-outline-secondary text-start"
                                 id="date-picker-button">Select a Delivery Date...</button>
                             <input type="hidden" name="delivery_date" id="delivery_date" required>
@@ -58,7 +68,8 @@
                         </div>
 
                         <div class="col-md-4">
-                            <label class="form-label">Delivery Time</label>
+                            {{-- ID fixed --}}
+                            <label class="form-label" id="delivery-time-label">Delivery Time</label>
                             <select class="form-select" name="delivery_time" id="delivery_time" required>
                                 <option value="">Select delivery time</option>
                             </select>
@@ -79,66 +90,97 @@
                     </div>
                 </div>
 
-                {{-- === DELIVERY ADDRESS === --}}
-                <div class="checkout-section mb-4">
-                    <h5 class="fw-bold text-dark mb-3">Delivery Address</h5>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Region</label>
-                            <select class="form-select" name="region" id="region_select" required disabled>
-                                <option value="">{{ old('region') ? old('region') : 'Select Region' }}</option>
-                            </select>
-                        </div>
+                {{-- === NEW: Container for Delivery-Only Fields === --}}
+                <div id="delivery-fields-container">
+                    {{-- === DELIVERY ADDRESS === --}}
+                    <div class="checkout-section mb-4">
+                        <h5 class="fw-bold text-dark mb-3">Delivery Address</h5>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Region</label>
+                                <select class="form-select" name="region" id="region_select" required disabled>
+                                    <option value="">{{ old('region') ? old('region') : 'Select Region' }}</option>
+                                </select>
+                            </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label">Province</label>
-                            <select class="form-select" name="province" id="province_select" required disabled>
-                                <option value="">{{ old('province') ? old('province') : 'Select Province' }}
-                                </option>
-                            </select>
-                        </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Province</label>
+                                <select class="form-select" name="province" id="province_select" required disabled>
+                                    <option value="">{{ old('province') ? old('province') : 'Select Province' }}
+                                    </option>
+                                </select>
+                            </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label">City / Municipality</label>
-                            <select class="form-select" name="city" id="city_select" required disabled>
-                                <option value="">{{ old('city') ? old('city') : 'Select City' }}</option>
-                            </select>
-                        </div>
+                            <div class="col-md-6">
+                                <label class="form-label">City / Municipality</label>
+                                <select class="form-select" name="city" id="city_select" required disabled>
+                                    <option value="">{{ old('city') ? old('city') : 'Select City' }}</option>
+                                </select>
+                            </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label">Barangay</label>
-                            <select class="form-select" name="barangay" id="barangay_select" required disabled>
-                                <option value="">{{ old('barangay') ? old('barangay') : 'Select Barangay' }}
-                                </option>
-                            </select>
-                        </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Barangay</label>
+                                <select class="form-select" name="barangay" id="barangay_select" required disabled>
+                                    <option value="">{{ old('barangay') ? old('barangay') : 'Select Barangay' }}
+                                    </option>
+                                </select>
+                            </div>
 
-                        <div class="col-md-9">
-                            <label class="form-label">Street Name, Building, House No.</label>
-                            <input type="text" class="form-control" name="street_name" id="street_name" required
-                                value="{{ old('street_name') ?? '' }}">
-                        </div>
+                            <div class="col-md-9">
+                                <label class="form-label">Street Name, Building, House No.</label>
+                                <input type="text" class="form-control" name="street_name" id="street_name" required
+                                    value="{{ old('street_name') ?? '' }}">
+                            </div>
 
-                        <div class="col-md-3">
-                            <label class="form-label">Postal Code</label>
-                            <input type="text" class="form-control" name="postal_code" id="postal_code" readonly
-                                placeholder="Auto-populated" required value="{{ old('postal_code') ?? '' }}">
+                            <div class="col-md-3">
+                                <label class="form-label">Postal Code</label>
+                                <input type="text" class="form-control" name="postal_code" id="postal_code" readonly
+                                    placeholder="Auto-populated" required value="{{ old('postal_code') ?? '' }}">
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="checkout-section mb-4">
-                    <h5 class="fw-bold text-dark mb-3">Delivery Pin Location</h5>
-                    <div id="map" class="rounded shadow-sm border" style="height:400px;"></div>
-                    <input type="hidden" name="latitude" id="latitude">
-                    <input type="hidden" name="longitude" id="longitude">
+                    {{-- === MAP === --}}
+                    <div class="checkout-section mb-4">
+                        <h5 class="fw-bold text-dark mb-3">Delivery Pin Location</h5>
+                        <div id="map" class="rounded shadow-sm border" style="height:400px;"></div>
+                        <input type="hidden" name="latitude" id="latitude">
+                        <input type="hidden" name="longitude" id="longitude">
+                    </div>
+                </div>
+                {{-- === END: delivery-fields-container === --}}
+
+
+                {{-- === NEW: Pickup Location Section === --}}
+                <div id="pickup-fields-container" style="display: none;">
+                    <div class="checkout-section mb-4">
+                        <h5 class="fw-bold text-dark mb-3">Pickup Location</h5>
+                        <div class="p-2">
+                            <h6 class="fw-bold mb-1">{{ $business?->business_name ?? 'Business' }}</h6>
+
+                            <p class="mb-0 text-muted" id="pickup-address-text">
+                                @if ($business?->business_location)
+                                    {{ $business->business_location }}
+                                @else
+                                    Loading address...
+                                @endif
+                            </p>
+
+                            <hr class="my-3">
+
+                            <div class="d-flex align-items-center text-muted small">
+                                <i class="fa-solid fa-circle-info me-2"></i>
+                                <span>Remember to collect your food at the restaurant when it's ready.</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {{-- === ORDERS & PAYMENT === --}}
                 <div class="checkout-section mb-5">
                     <h5 class="fw-bold text-dark mb-3">Your Pre-Order</h5>
                     @php
-                        $business = $vendors->first();
+                        // $business is already defined from the controller
                         $methods = $business?->paymentMethods ?? collect([]);
                     @endphp
 
@@ -186,23 +228,20 @@
                                             <i class="bx bx-coin-stack text-warning me-1"></i>
                                             Advance Payment Required
                                         </h6>
+
+                                        {{-- === LOGIC BUG FIXED HERE === --}}
                                         <ul class="px-4 list-unstyled small mb-3">
-                                            @foreach ($preorders as $item)
-                                                @php
-                                                    $product = $products[$item['product_id']] ?? null;
-                                                    $advanceForItem =
-                                                        ($product->advance_amount ?? 0) * $item['quantity'];
-                                                @endphp
-                                                @if ($product && $advanceForItem > 0)
-                                                    <li class="d-flex justify-content-between py-1 border-bottom">
-                                                        <span>{{ $product->item_name }} ×
-                                                            {{ $item['quantity'] }}</span>
-                                                        <span
-                                                            class="fw-semibold">₱{{ number_format($advanceForItem, 2) }}</span>
-                                                    </li>
-                                                @endif
+                                            @foreach ($advance_breakdown as $itemName => $breakdown)
+                                                <li class="d-flex justify-content-between py-1 border-bottom">
+                                                    <span>{{ $itemName }} ×
+                                                        {{ $breakdown['quantity'] }}</span>
+                                                    <span
+                                                        class="fw-semibold">₱{{ number_format($breakdown['advance_total'], 2) }}</span>
+                                                </li>
                                             @endforeach
                                         </ul>
+                                        {{-- === END OF FIX === --}}
+
                                         <div class="d-flex justify-content-between fw-bold text-dark px-4">
                                             <span>Total Advance Required:</span>
                                             <span
@@ -269,7 +308,7 @@
                                                         @php
                                                             $methodNameLower = strtolower($method->method_name ?? '');
                                                             $isCodMethod =
-                                                                str_contains($methodNameLower, 'cash on delivery') ||
+                                                                str_contains($methodNameLower, 'cash') ||
                                                                 str_contains($methodNameLower, 'cod') ||
                                                                 str_contains($methodNameLower, 'card on delivery');
 
@@ -302,7 +341,8 @@
                 </div>
 
                 <div class="text-end mt-4">
-                    <button type="submit" class="btn btn-lg btn-primary">Place Pre-Order</button>
+                    {{-- ID fixed --}}
+                    <button type="submit" class="btn btn-lg btn-primary" id="place-order-btn">Place Pre-Order</button>
                 </div>
             </form>
         </div>
@@ -415,35 +455,63 @@
         .fc-day-today {
             background-color: #fffce6 !important;
         }
+
+        /* === ADD THESE NEW STYLES === */
+        .order-type-toggle {
+            display: flex;
+            background-color: #f0f0f0;
+            border-radius: 50px;
+            padding: 4px;
+            margin-bottom: 1.5rem;
+            width: fit-content;
+        }
+
+        .order-type-toggle .btn {
+            border: none;
+            border-radius: 50px;
+            padding: 0.5rem 1.5rem;
+            font-weight: 600;
+            color: #6c757d;
+            background-color: transparent;
+            box-shadow: none !important;
+        }
+
+        .order-type-toggle .btn.active {
+            color: #0d6efd;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+        }
     </style>
 
     {{-- EXTERNAL SCRIPTS --}}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
     @vite(['resources/js/philippine-addresses.js'])
 
-    <script>
-        // queue stub so Google Maps can call initMapNew even if real init not yet defined
-        (function() {
-            window.__gm_init_called = window.__gm_init_called || false;
-            window.__gm_init_queue = window.__gm_init_queue || 0; // just count calls
-
-            window.initMapNew = function() {
-                // increment queue count so real init (later) will know it fired
-                window.__gm_init_queue = (window.__gm_init_queue || 0) + 1;
-            };
-        })();
-    </script>
 
     <script async
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCvpcdeUJTkj9qPV9tZDSIQB184oR8Mwrc&libraries=marker&callback=initMapNew&loading=async">
     </script>
 
-    {{-- ========================================================= --}}
-    {{-- ============= ADDED SCRIPT (from cart blade) ============ --}}
-    {{-- ========================================================= --}}
+
     <script>
+        /* ----------------- Google Maps init stub (unchanged) ----------------- */
+        (function() {
+            window.__gm_init_called = window.__gm_init_called || false;
+            window.__gm_init_queue = window.__gm_init_queue || 0;
+            window.initMapNew = function() {
+                window.__gm_init_queue = (window.__gm_init_queue || 0) + 1;
+            };
+        })();
+
+        /* ----------------- Constants: address fields list (single source) ----------------- */
+        /* Keep these IDs in sync with your markup. This replaces scattered addressFields uses. */
+        const ADDRESS_FIELD_IDS = [
+            'region_select', 'province_select', 'city_select',
+            'barangay_select', 'street_name', 'postal_code'
+        ];
+
+        /* ----------------- whenAddressesReady (unchanged logic, guarded) ----------------- */
         function whenAddressesReady(fn) {
-            // --- DEFAULTS FOR REGION / PROVINCE / CITY ---
             const oldRegion = @json(old('region') ?? '');
             const oldProvince = @json(old('province') ?? '');
             const oldCity = @json(old('city') ?? '');
@@ -464,16 +532,13 @@
                 return null;
             }
 
-            // The default-applyer (run AFTER your populate callback)
             function applyAddressDefaults() {
-                // Guard: region/province/city select elements must exist
                 const regionSelect = document.getElementById('region_select');
                 const provinceSelect = document.getElementById('province_select');
                 const citySelect = document.getElementById('city_select');
 
                 if (!regionSelect) return;
 
-                // If user has old() values, respect them
                 if (oldRegion) {
                     regionSelect.value = oldRegion;
                     regionSelect.dispatchEvent(new Event('change', {
@@ -502,8 +567,7 @@
                     return;
                 }
 
-                // No old() -> pick a Region key that looks like Region V / Bicol
-                const allRegions = Object.keys(philippineAddresses || {});
+                const allRegions = Object.keys(window.philippineAddresses || {});
                 const regionKey = findKey(allRegions, [/^\s*V\s*$/, /Region\s*V/i, 'bicol']);
                 if (regionKey && regionSelect) {
                     regionSelect.value = regionKey;
@@ -512,7 +576,6 @@
                     }));
                 }
 
-                // Wait for province options to populate, then pick Camarines Sur
                 setTimeout(() => {
                     if (!provinceSelect) return;
                     const provKeys = Array.from(provinceSelect.options).map(o => o.value);
@@ -531,7 +594,6 @@
                         }
                     }
 
-                    // Wait for city options then pick Naga City
                     setTimeout(() => {
                         if (!citySelect) return;
                         const cityKeys = Array.from(citySelect.options).map(o => o.value);
@@ -550,7 +612,6 @@
                             }
                         }
 
-                        // optional: ask the map to geocode & center now (if function exists)
                         if (typeof geocodeAndCenterMap === 'function') {
                             setTimeout(geocodeAndCenterMap, 120);
                         }
@@ -558,18 +619,15 @@
                 }, 60);
             }
 
-            // Run the populate callback and then apply defaults
             const runner = () => {
                 try {
-                    fn(); // this is your original populate code that fills selects
+                    fn();
                 } catch (e) {
                     console.error('whenAddressesReady: callback error', e);
                 }
-                // apply the defaults after populate
                 applyAddressDefaults();
             };
 
-            // original readiness logic (preserved)
             if (window.philippineAddresses && Object.keys(window.philippineAddresses).length) {
                 runner();
                 return;
@@ -581,13 +639,19 @@
                 if (window.philippineAddresses && Object.keys(window.philippineAddresses).length) runner();
             }, 300);
         }
-    </script>
 
-    <script>
+        /* ----------------- Main DOM loaded block (combines your logic) ----------------- */
         (function() {
-            // Make sure DOM is ready
             document.addEventListener('DOMContentLoaded', function() {
 
+                /* ----------------- businessLocation (guarded) ----------------- */
+                window.businessLocation = {
+                    lat: {{ $business?->latitude ?? 'null' }},
+                    lng: {{ $business?->longitude ?? 'null' }},
+                    address: @json($business?->business_location)
+                };
+
+                /* ----------------- Phone input: digits-only ----------------- */
                 const phoneInput = document.getElementById('phone_number');
                 if (phoneInput) {
                     phoneInput.addEventListener('input', () => {
@@ -595,7 +659,7 @@
                     });
                 }
 
-                /* ======== Shared / helper functions ======== */
+                /* ======== Helper functions (unchanged) ======== */
                 function pad2(n) {
                     return n < 10 ? '0' + n : '' + n;
                 }
@@ -626,29 +690,20 @@
                 function buildSlots(startMin, endMin, step) {
                     step = step || 30;
                     if (startMin === null || endMin === null) return [];
-
                     var out = [];
-                    var MINUTES_IN_DAY = 1440; // 24 * 60
-
+                    var MINUTES_IN_DAY = 1440;
                     if (endMin <= startMin) {
-                        // --- Overnight Case (e.g., 18:00 to 02:00) ---
-
-                        // Part 1: From startMin to midnight (e.g., 18:02 ... 23:32)
                         for (var t = startMin; t + step <= MINUTES_IN_DAY; t += step) {
                             var hh = Math.floor(t / 60),
                                 mm = t % 60;
                             out.push(pad2(hh) + ':' + pad2(mm));
                         }
-
-                        // Part 2: From midnight (0) to endMin (e.g., 00:00 ... 01:30)
                         for (var t = 0; t + step <= endMin; t += step) {
                             var hh = Math.floor(t / 60),
                                 mm = t % 60;
                             out.push(pad2(hh) + ':' + pad2(mm));
                         }
-
                     } else {
-                        // --- Normal Case (e.g., 09:00 to 17:00) ---
                         for (var t = startMin; t + step <= endMin; t += step) {
                             var hh = Math.floor(t / 60),
                                 mm = t % 60;
@@ -684,37 +739,35 @@
                 /* ======== openingHours injected by backend ======== */
                 var openingHours = @json($openingHours ?? []);
 
-                /* ======== Google Maps globals: reuse window.gmap if present to avoid re-declare ======== */
-                // Google maps callback must be global: expose initMapNew on window
+                /* ======== Google Maps real init wrapper (unchanged behavior) ======== */
                 (function defineRealInit() {
-                    // store the original body you already have for initialization:
                     function realInit() {
-                        // --- your existing init code here ---
-                        window.gmap = window.gmap || new google.maps.Map(document.getElementById("map"), {
-                            center: {
-                                lat: 12.8797,
-                                lng: 121.7740
-                            },
-                            zoom: 5.5,
-                            mapId: '2264679aceb18180d68ab9b4',
-                            zoomControl: true,
-                            mapTypeControl: false,
-                            streetViewControl: false
-                        });
-                        window.geocoder = window.geocoder || new google.maps.Geocoder();
-                        // --- end existing init code ---
+                        try {
+                            window.gmap = window.gmap || new google.maps.Map(document.getElementById(
+                                "map"), {
+                                center: {
+                                    lat: 12.8797,
+                                    lng: 121.7740
+                                },
+                                zoom: 5.5,
+                                mapId: '2264679aceb18180d68ab9b4',
+                                zoomControl: true,
+                                mapTypeControl: false,
+                                streetViewControl: false
+                            });
+                            window.geocoder = window.geocoder || new google.maps.Geocoder();
+                        } catch (e) {
+                            // If map element missing or Google lib not ready, ignore — geocoding calls are guarded elsewhere
+                            console.error('Google map init error (ignored if headless):', e);
+                        }
 
-                        // NOW, call the function that sets address defaults and centers the map
-                        // if (typeof applyAddressDefaults === 'function') {
-                        //     applyAddressDefaults();
-                        // }
+                        if (typeof fetchAndDisplayPickupAddress === 'function') {
+                            fetchAndDisplayPickupAddress();
+                        }
                     }
 
-                    // replace the stub with the real init
                     window.initMapNew = realInit;
 
-                    // If Google Maps already invoked the stub before we defined the real init,
-                    // __gm_init_queue will be > 0 — call real init to match expected behavior.
                     if (window.__gm_init_queue && window.__gm_init_queue > 0) {
                         try {
                             window.initMapNew();
@@ -725,46 +778,106 @@
                     }
                 })();
 
-                // placeDraggableMarker / geocode use window.gmap & window.geocoder
+                /* ======== fetchAndDisplayPickupAddress (guarded) ======== */
+                function fetchAndDisplayPickupAddress() {
+                    const addressElement = document.getElementById('pickup-address-text');
+                    if (!addressElement) return;
+                    if (!window.geocoder) {
+                        setTimeout(fetchAndDisplayPickupAddress, 1000); // try again when geocoder is ready
+                        return;
+                    }
+                    if (window.businessLocation && window.businessLocation.address) {
+                        addressElement.textContent = window.businessLocation.address;
+                        return;
+                    }
+                    if (window.businessLocation && window.businessLocation.lat && window.businessLocation.lng) {
+                        const latlng = {
+                            lat: window.businessLocation.lat,
+                            lng: window.businessLocation.lng
+                        };
+                        addressElement.textContent = 'Loading address...';
+                        window.geocoder.geocode({
+                            location: latlng
+                        }, function(results, status) {
+                            if (status === 'OK' && results && results[0]) {
+                                addressElement.textContent = results[0].formatted_address;
+                            } else if (status === 'OK') {
+                                addressElement.textContent = 'No address found for these coordinates.';
+                            } else {
+                                console.error('Geocoder failed due to: ' + status);
+                                addressElement.textContent = 'Could not retrieve address.';
+                            }
+                        });
+                    }
+                }
+
+                /* ======== placeDraggableMarker & geocodeAndCenterMap (guarded) ======== */
                 async function placeDraggableMarker(lat, lng) {
-                    if (!window.google || !google.maps.importLibrary) {
+                    if (!window.google) {
                         console.error("Google Maps library not loaded.");
                         return;
                     }
-                    const {
-                        AdvancedMarkerElement
-                    } = await google.maps.importLibrary("marker");
-                    if (window.gmarker) {
-                        window.gmarker.position = {
-                            lat,
-                            lng
-                        };
-                    } else {
-                        window.gmarker = new AdvancedMarkerElement({
-                            position: {
+                    try {
+                        const {
+                            AdvancedMarkerElement
+                        } = await google.maps.importLibrary("marker");
+                        if (window.gmarker) {
+                            try {
+                                window.gmarker.position = {
+                                    lat,
+                                    lng
+                                };
+                            } catch (e) {}
+                        } else {
+                            window.gmarker = new AdvancedMarkerElement({
+                                position: {
+                                    lat,
+                                    lng
+                                },
+                                map: window.gmap,
+                                gmpDraggable: false
+                            });
+                        }
+                    } catch (e) {
+                        console.error("AdvancedMarkerElement failed, falling back to simple Marker.", e);
+                        try {
+                            if (window.gmarker) window.gmarker.setPosition({
                                 lat,
                                 lng
-                            },
-                            map: window.gmap,
-                            gmpDraggable: false
-                        });
+                            });
+                            else window.gmarker = new google.maps.Marker({
+                                position: {
+                                    lat,
+                                    lng
+                                },
+                                map: window.gmap,
+                                draggable: false
+                            });
+                        } catch (err) {
+                            console.error(err);
+                        }
                     }
                     var latEl = document.getElementById('latitude'),
                         lngEl = document.getElementById('longitude');
                     if (latEl) latEl.value = lat;
                     if (lngEl) lngEl.value = lng;
                 }
+
                 async function geocodeAndCenterMap() {
-                    const addressString = [document.getElementById('barangay_select').value, document
-                        .getElementById('city_select').value, document.getElementById('province_select')
-                        .value, document.getElementById('region_select').value
-                    ].filter(Boolean).join(', ');
-                    let zoomLevel = 6;
-                    if (document.getElementById('province_select').value) zoomLevel = 9;
-                    if (document.getElementById('city_select').value) zoomLevel = 12;
-                    if (document.getElementById('barangay_select').value) zoomLevel = 15;
-                    if (!addressString) return;
                     try {
+                        const barangayEl = document.getElementById('barangay_select');
+                        const cityEl = document.getElementById('city_select');
+                        const provEl = document.getElementById('province_select');
+                        const regionEl = document.getElementById('region_select');
+                        if (!regionEl || !window.geocoder) return;
+                        const addressString = [barangayEl?.value, cityEl?.value, provEl?.value, regionEl
+                            ?.value
+                        ].filter(Boolean).join(', ');
+                        let zoomLevel = 6;
+                        if (provEl?.value) zoomLevel = 9;
+                        if (cityEl?.value) zoomLevel = 12;
+                        if (barangayEl?.value) zoomLevel = 15;
+                        if (!addressString) return;
                         const resp = await window.geocoder.geocode({
                             address: addressString,
                             componentRestrictions: {
@@ -773,8 +886,10 @@
                         });
                         if (resp && resp.results && resp.results[0]) {
                             const loc = resp.results[0].geometry.location;
-                            window.gmap.panTo(loc);
-                            window.gmap.setZoom(zoomLevel);
+                            if (window.gmap && typeof window.gmap.panTo === 'function') {
+                                window.gmap.panTo(loc);
+                                window.gmap.setZoom(zoomLevel);
+                            }
                             await placeDraggableMarker(loc.lat(), loc.lng());
                         }
                     } catch (error) {
@@ -782,7 +897,7 @@
                     }
                 }
 
-                /* ======== NOTE modal helpers (unchanged behaviour) ======== */
+                /* ======== note modal helpers (unchanged) ======== */
                 var currentBusinessId, currentProductId, currentNoteButton;
                 window.openNoteModal = window.openNoteModal || function(businessId, productId, button) {
                     currentNoteButton = button;
@@ -812,11 +927,7 @@
                     bootstrap.Modal.getInstance(document.getElementById("noteModal")).hide();
                 };
 
-                {{-- ========================================================= --}}
-                {{-- ============ MODIFIED ADDRESS SCRIPT BLOCK ============== --}}
-                {{-- ========================================================= --}}
-
-                /* ======== ADDRESS LOGIC (from Cart) ======== */
+                /* ----------------- ADDRESS SELECT LOGIC (uses whenAddressesReady) ----------------- */
                 const regionSelect = document.getElementById('region_select');
                 const provinceSelect = document.getElementById('province_select');
                 const citySelect = document.getElementById('city_select');
@@ -835,12 +946,11 @@
                     el.disabled = false;
                 };
 
-                // This is the new part that wraps the logic
                 whenAddressesReady(() => {
                     if (!regionSelect) return;
-                    populateSelect(regionSelect, Object.keys(philippineAddresses).sort(),
+                    populateSelect(regionSelect, Object.keys(window.philippineAddresses || {}).sort(),
                         'Select Region');
-                    if (regionSelect) regionSelect.disabled = true; // RE-DISABLE
+                    if (regionSelect) regionSelect.disabled = true;
 
                     regionSelect.addEventListener('change', () => {
                         if (provinceSelect) resetSelect(provinceSelect, 'Select Province');
@@ -849,12 +959,12 @@
                         if (postalCodeInput) postalCodeInput.value = '';
 
                         const regVal = regionSelect.value;
-                        if (regVal && philippineAddresses[regVal]?.province_list &&
+                        if (regVal && window.philippineAddresses?.[regVal]?.province_list &&
                             provinceSelect) {
-                            populateSelect(provinceSelect, Object.keys(philippineAddresses[
-                                    regVal]
-                                .province_list).sort(), 'Select Province');
-                            if (provinceSelect) provinceSelect.disabled = true; // RE-DISABLE
+                            populateSelect(provinceSelect, Object.keys(window
+                                    .philippineAddresses[regVal].province_list).sort(),
+                                'Select Province');
+                            if (provinceSelect) provinceSelect.disabled = true;
                         }
                         if (typeof geocodeAndCenterMap === 'function') geocodeAndCenterMap();
                     });
@@ -867,15 +977,12 @@
 
                             const regVal = regionSelect.value;
                             const provVal = provinceSelect.value;
-                            if (regVal && provVal && philippineAddresses[regVal]?.province_list
-                                ?.[
-                                    provVal
-                                ]?.municipality_list) {
-                                populateSelect(citySelect, Object.keys(philippineAddresses[
-                                            regVal]
-                                        .province_list[provVal].municipality_list).sort(),
-                                    'Select City');
-                                if (citySelect) citySelect.disabled = true; // RE-DISABLE
+                            if (regVal && provVal && window.philippineAddresses?.[regVal]
+                                ?.province_list?.[provVal]?.municipality_list) {
+                                populateSelect(citySelect, Object.keys(window
+                                    .philippineAddresses[regVal].province_list[provVal]
+                                    .municipality_list).sort(), 'Select City');
+                                if (citySelect) citySelect.disabled = true;
                             }
                             if (typeof geocodeAndCenterMap === 'function')
                                 geocodeAndCenterMap();
@@ -891,16 +998,13 @@
                             const provVal = provinceSelect.value;
                             const cityVal = citySelect.value;
                             if (regVal && provVal && cityVal) {
-                                const cityData = philippineAddresses[regVal].province_list[
-                                        provVal]
-                                    .municipality_list[cityVal];
+                                const cityData = window.philippineAddresses[regVal]
+                                    .province_list[provVal].municipality_list[cityVal];
                                 if (cityData?.barangay_list && barangaySelect) populateSelect(
                                     barangaySelect, cityData.barangay_list.sort(),
-                                    'Select Barangay'
-                                ); // This ENABLES barangay
+                                    'Select Barangay');
                                 if (postalCodeInput) postalCodeInput.value = cityData
-                                    ?.postal_code ||
-                                    '';
+                                    ?.postal_code || '';
                             }
                             if (typeof geocodeAndCenterMap === 'function')
                                 geocodeAndCenterMap();
@@ -914,9 +1018,8 @@
                         });
                     }
                 });
-                /* ======== END OF ADDRESS LOGIC ======== */
 
-                /* ======== Payment UI (unchanged) ======== */
+                /* ----------------- Payment UI (unchanged) ----------------- */
                 const totalAdvanceRequired = {{ $total_advance_required ?? 0 }};
                 const paymentMethodRadios = document.querySelectorAll('input[name="payment_method"]');
                 const submitButton = document.querySelector('#checkoutForm button[type="submit"]');
@@ -929,23 +1032,24 @@
                         'input[name="payment_method"]:checked');
                     if (!selectedPaymentMethod) return;
                     const methodName = selectedPaymentMethod.dataset.methodName || '';
-                    const isCod = methodName.includes('cash on delivery') || methodName.includes('cod');
-                    submitButton.textContent = 'Place Pre-Order';
+                    const isCod = (methodName.includes('cash') || methodName.includes('cod')) && methodName !==
+                        'gcash';
+                    if (submitButton) submitButton.textContent = 'Place Pre-Order';
                     if (totalAdvanceRequired > 0) {
                         if (isCod) {
-                            codInfoText.classList.remove('d-none');
+                            codInfoText?.classList.remove('d-none');
                             if (payFullOption) payFullOption.disabled = true;
                             if (payAdvanceOption) payAdvanceOption.checked = true;
-                            submitButton.textContent = 'Proceed to Pay Advance';
+                            if (submitButton) submitButton.textContent = 'Proceed to Pay Advance';
                         } else {
-                            codInfoText.classList.add('d-none');
+                            codInfoText?.classList.add('d-none');
                             if (payFullOption) payFullOption.disabled = false;
-                            submitButton.textContent = 'Proceed to Payment';
+                            if (submitButton) submitButton.textContent = 'Proceed to Payment';
                         }
                     } else if (isCod) {
-                        submitButton.textContent = 'Place COD Order';
+                        if (submitButton) submitButton.textContent = 'Place COD Order';
                     } else {
-                        submitButton.textContent = 'Proceed to Payment';
+                        if (submitButton) submitButton.textContent = 'Proceed to Payment';
                     }
                 }
                 paymentMethodRadios.forEach(r => r.addEventListener('change', updatePaymentUI));
@@ -953,19 +1057,16 @@
                     'change', updatePaymentUI));
                 updatePaymentUI();
 
-                /* ======== Date picker / calendar / delivery time ======== */
+                /* ----------------- Delivery date/time / calendar (unchanged, guarded) ----------------- */
                 const scheduleModalEl = document.getElementById('scheduleModal');
-                const scheduleModal = new bootstrap.Modal(scheduleModalEl);
+                const scheduleModal = scheduleModalEl ? new bootstrap.Modal(scheduleModalEl) : null;
                 const calendarEl = document.getElementById('schedule-calendar');
                 const datePickerButton = document.getElementById('date-picker-button');
                 const hiddenDateInput = document.getElementById('delivery_date');
-                const businessId = document.querySelector('input[name="business_id"]').value;
+                const businessId = (document.querySelector('input[name="business_id"]') || {}).value || null;
                 const deliveryTimeSelect = document.getElementById('delivery_time');
 
-                // Keep delivery_time disabled initially
                 if (deliveryTimeSelect) deliveryTimeSelect.disabled = true;
-
-                // Set min to tomorrow for preorders (prevents selecting today via other means)
                 if (hiddenDateInput) {
                     const t = new Date();
                     t.setDate(t.getDate() + 1);
@@ -975,7 +1076,6 @@
                     hiddenDateInput.min = `${yyyy}-${mm}-${dd}`;
                 }
 
-                /* ---------- populateForSelectedDate MUST be defined before calendar.create (so select callback sees it) ---------- */
                 var lastPopulateAt = 0;
 
                 function canPopulate() {
@@ -991,8 +1091,6 @@
                         var dateEl = document.getElementById('delivery_date');
                         var select = document.getElementById('delivery_time');
                         if (!dateEl || !select) return;
-
-                        // If no date chosen yet, show placeholder and keep disabled
                         if (!dateEl.value || !dateEl.value.length) {
                             select.innerHTML = '';
                             var placeholder = document.createElement('option');
@@ -1004,12 +1102,8 @@
                             select.disabled = true;
                             return;
                         }
-
                         var selectedDate = dateEl.value;
                         var dayKey = weekdayKeyFromYMD(selectedDate);
-
-                        //console.log('[Delivery Time] Selected Date:', selectedDate, 'Day Key:', dayKey);
-
                         var previousValue = select.value;
                         select.innerHTML = '';
                         var placeholder2 = document.createElement('option');
@@ -1021,11 +1115,7 @@
                         select.appendChild(placeholder2);
 
                         var hours = openingHours[dayKey];
-                        //console.log('[Delivery Time] Hours for this day:', hours);
-
                         if (!hours || hours.is_closed) {
-                            //console.warn('[Delivery Time] Vendor is closed on this day.');
-
                             var optClosed = document.createElement('option');
                             optClosed.value = '';
                             optClosed.text = 'Vendor is closed on ' + (dayKey.charAt(0).toUpperCase() + dayKey
@@ -1038,11 +1128,7 @@
 
                         var startMin = parseToMinutes(hours.opens_at);
                         var endMin = parseToMinutes(hours.closes_at);
-                        //console.log('[Delivery Time] Parsed Minutes -> Start:', startMin, 'End:', endMin);
-
                         if (startMin === null || endMin === null) {
-                            //console.error('[Delivery Time] Failed to parse start/end times.');
-
                             var optErr = document.createElement('option');
                             optErr.value = '';
                             optErr.text = 'Invalid vendor hours';
@@ -1056,7 +1142,6 @@
                         var nowMin = nowLocalMinutes();
 
                         if (selectedDate === todayYmd) {
-                            // For completeness (shouldn't hit for preorders with min=tomorrow), keep same-day logic
                             if (nowMin < startMin) {
                                 var optNotOpen = document.createElement('option');
                                 optNotOpen.value = '';
@@ -1114,13 +1199,7 @@
                             return;
                         }
 
-                        //console.log('[Delivery Time] Building slots for future date...');
-
-                        // Future date path (preorder)
                         var allSlotsFuture = buildSlots(startMin, endMin, 30);
-
-                        //console.log('[Delivery Time] Built slots:', allSlotsFuture);
-
                         for (var m = 0; m < allSlotsFuture.length; m++) {
                             var s = allSlotsFuture[m];
                             var o = document.createElement('option');
@@ -1140,181 +1219,199 @@
                         }
                         select.disabled = false;
                     } catch (err) {
-                        //console.error('[delivery-time] populate error', err);
+                        /* swallow populate errors */
                     }
                 }
 
-                /* ---------- Create calendar AFTER populateForSelectedDate is defined ---------- */
-                var calendar = new FullCalendar.Calendar(calendarEl, {
-                    initialView: 'dayGridMonth',
-                    height: 'auto',
-                    headerToolbar: {
-                        left: 'prev',
-                        center: 'title',
-                        right: 'next'
-                    },
-                    selectable: true,
-                    dayCellDidMount: function(info) {
-                        // Disable past dates visually
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        if (info.date < today) {
-                            info.el.classList.add('fc-day-disabled');
-                        }
-                    },
-                    eventContent: function(arg) {
-                        const evt = arg.event;
-                        const props = evt.extendedProps || {};
-                        const color = props.indicatorColor || evt.indicatorColor || '#6c757d';
-                        const state = props.state || evt.state || 'available';
-                        const currentOrders = props.currentOrders ?? evt.currentOrders ?? 0;
-                        const maxOrders = props.maxOrders ?? evt.maxOrders ?? 0;
-                        const remaining = Math.max(maxOrders - currentOrders, 0);
-
-                        let bgColor = color;
-                        if (state === 'full' || state === 'booked') bgColor = '#dc3545';
-                        else if (state === 'available') bgColor = '#198754';
-                        else if (state === 'past') bgColor = '#6c757d';
-
-                        return {
-                            html: `
-    <div style="
-      background:${bgColor};
-      color:white;
-      border-radius:4px;
-      font-size:0.7rem;
-      line-height:1.2;
-      text-align:center;
-      padding:3px 0;">
-      ${remaining > 0 ? `${remaining} slot${remaining===1?'':'s'} left` : 'Full'}
-    </div>`
-                        };
-                    },
-                    eventDidMount: function(info) {
-                        const props = info.event.extendedProps || {};
-                        const tooltip =
-                            `${props.currentOrders ?? 0}/${props.maxOrders ?? 0} orders\n${props.state === 'available' ? 'Slots open' : 'Fully booked'}`;
-                        info.el.setAttribute('title', tooltip);
-                    },
-                    selectAllow: function(selectInfo) {
-                        const selectedDate = selectInfo.start;
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        const tomorrow = new Date(today);
-                        tomorrow.setDate(today.getDate() + 1);
-
-                        // Prevent past or today
-                        if (selectedDate < tomorrow) return false;
-
-                        // Then check for availability event
-                        const eventOnDay = calendar.getEvents().find(ev =>
-                            ev.start.toDateString() === selectedDate.toDateString()
-                        );
-                        if (!eventOnDay) {
-                            toastr.info('Pre-orders start from future available dates.');
-                            return false;
-                        }
-                        if (eventOnDay.extendedProps && eventOnDay.extendedProps.state === 'full') {
-                            toastr.warning('This date is fully booked and cannot be selected.');
-                            return false;
-                        }
-                        return true;
-                    },
-                    select: function(selectionInfo) {
-                        const selectedDate = selectionInfo.start;
-                        const year = selectedDate.getFullYear();
-                        const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-                        const day = String(selectedDate.getDate()).padStart(2, '0');
-                        hiddenDateInput.value = `${year}-${month}-${day}`;
-
-                        const friendlyDate = selectedDate.toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                        });
-                        datePickerButton.textContent = `Selected: ${friendlyDate}`;
-                        datePickerButton.classList.remove('is-invalid');
-                        datePickerButton.classList.add('is-valid');
-
-                        scheduleModal.hide();
-                        populateForSelectedDate();
-                    },
-                    events: `/api/customer-schedule/${businessId}/availability`
-                });
-
-                // show modal & render calendar when opened
-                datePickerButton?.addEventListener('click', function() {
-                    scheduleModal.show();
-                });
-                scheduleModalEl?.addEventListener('shown.bs.modal', function() {
-                    calendar.render();
-                    calendar.updateSize();
-                });
-
-                {{-- ========================================================= --}}
-                {{-- ============= MODIFIED SUBMIT HANDLER BLOCK ============= --}}
-                {{-- ========================================================= --}}
-                /* ---------- Form submit validation (MODIFIED) ---------- */
-                var form = document.getElementById("checkoutForm");
-                if (form) {
-                    form.addEventListener("submit", function(e) {
-                        e.preventDefault(); // Prevent submit immediately
-                        var isValid = true;
-                        form.querySelectorAll(
-                                "input[required]:not([type='hidden']), select[required]:not(:disabled)")
-                            .forEach(function(i) {
-                                i.classList.remove("is-invalid");
-                                if (!i.value.trim()) {
-                                    i.classList.add("is-invalid");
-                                    isValid = false;
-                                }
+                /* ---------- FullCalendar creation (if element exists) ---------- */
+                if (calendarEl) {
+                    var calendar = new FullCalendar.Calendar(calendarEl, {
+                        initialView: 'dayGridMonth',
+                        height: 'auto',
+                        headerToolbar: {
+                            left: 'prev',
+                            center: 'title',
+                            right: 'next'
+                        },
+                        selectable: true,
+                        dayCellDidMount: function(info) {
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            if (info.date < today) info.el.classList.add('fc-day-disabled');
+                        },
+                        eventContent: function(arg) {
+                            const evt = arg.event;
+                            const props = evt.extendedProps || {};
+                            const color = props.indicatorColor || evt.indicatorColor || '#6c757d';
+                            const state = props.state || evt.state || 'available';
+                            const currentOrders = props.currentOrders ?? evt.currentOrders ?? 0;
+                            const maxOrders = props.maxOrders ?? evt.maxOrders ?? 0;
+                            const remaining = Math.max(maxOrders - currentOrders, 0);
+                            let bgColor = color;
+                            if (state === 'full' || state === 'booked') bgColor = '#dc3545';
+                            else if (state === 'available') bgColor = '#198754';
+                            else if (state === 'past') bgColor = '#6c757d';
+                            return {
+                                html: `<div style="background:${bgColor};color:white;border-radius:4px;font-size:0.7rem;line-height:1.2;text-align:center;padding:3px 0;">${remaining > 0 ? `${remaining} slot${remaining===1?'':'s'} left` : 'Full'}</div>`
+                            };
+                        },
+                        eventDidMount: function(info) {
+                            const props = info.event.extendedProps || {};
+                            const tooltip =
+                                `${props.currentOrders ?? 0}/${props.maxOrders ?? 0} orders\n${props.state === 'available' ? 'Slots open' : 'Fully booked'}`;
+                            info.el.setAttribute('title', tooltip);
+                        },
+                        selectAllow: function(selectInfo) {
+                            const selectedDate = selectInfo.start;
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const tomorrow = new Date(today);
+                            tomorrow.setDate(today.getDate() + 1);
+                            if (selectedDate < tomorrow) return false;
+                            const eventOnDay = calendar.getEvents().find(ev => ev.start
+                                .toDateString() === selectedDate.toDateString());
+                            if (!eventOnDay) {
+                                toastr.info('Pre-orders start from future available dates.');
+                                return false;
+                            }
+                            if (eventOnDay.extendedProps && eventOnDay.extendedProps.state ===
+                                'full') {
+                                toastr.warning('This date is fully booked and cannot be selected.');
+                                return false;
+                            }
+                            return true;
+                        },
+                        select: function(selectionInfo) {
+                            const selectedDate = selectionInfo.start;
+                            const year = selectedDate.getFullYear();
+                            const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                            const day = String(selectedDate.getDate()).padStart(2, '0');
+                            if (hiddenDateInput) hiddenDateInput.value = `${year}-${month}-${day}`;
+                            const friendlyDate = selectedDate.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
                             });
-                        if (!hiddenDateInput.value) {
-                            datePickerButton.classList.add('is-invalid');
-                            isValid = false;
-                        }
+                            if (datePickerButton) {
+                                datePickerButton.textContent = `Selected: ${friendlyDate}`;
+                                datePickerButton.classList.remove('is-invalid');
+                                datePickerButton.classList.add('is-valid');
+                            }
+                            if (scheduleModal) scheduleModal.hide();
+                            populateForSelectedDate();
+                        },
+                        events: `/api/customer-schedule/${businessId}/availability`
+                    });
+                    datePickerButton?.addEventListener('click', function() {
+                        scheduleModal?.show();
+                    });
+                    scheduleModalEl?.addEventListener('shown.bs.modal', function() {
+                        calendar.render();
+                        calendar.updateSize();
+                    });
+                }
 
+                /* ----------------- * MODIFIED * Submit Handler ----------------- */
+                const checkoutFormEl = document.getElementById("checkoutForm");
+                if (checkoutFormEl) {
+                    checkoutFormEl.addEventListener("submit", function(e) {
+                        e.preventDefault();
+                        var isValid = true;
+
+                        // Determine order type
+                        const orderTypeEl = document.getElementById('order_type');
+                        const orderType = orderTypeEl ? (orderTypeEl.value || 'delivery') : 'delivery';
+
+                        // Validate required inputs except address fields when pickup
+                        checkoutFormEl.querySelectorAll(
+                            "input[required]:not([type='hidden']), select[required]:not(:disabled)"
+                        ).forEach(function(i) {
+                            i.classList.remove("is-invalid");
+
+                            if (orderType === 'pickup' && i.id && ADDRESS_FIELD_IDS.includes(i
+                                    .id)) {
+                                // skip address fields when pickup
+                                return;
+                            }
+
+                            if (!i.value || !String(i.value).trim()) {
+                                i.classList.add("is-invalid");
+                                isValid = false;
+                            }
+                        });
+
+                        /*
+                         * =================================================================
+                         * == MODIFICATION START: Validate Date/Time for BOTH modes
+                         * =================================================================
+                         */
+
+                        // ALWAYS require date/time, regardless of orderType
+                        if (!hiddenDateInput?.value) {
+                            if (datePickerButton) datePickerButton.classList.add('is-invalid');
+                            isValid = false;
+                        } else {
+                            // Date is present, now check time
+                            if (!deliveryTimeSelect || deliveryTimeSelect.disabled || !
+                                deliveryTimeSelect
+                                .value) {
+                                if (deliveryTimeSelect) deliveryTimeSelect.classList.add('is-invalid');
+                                isValid = false;
+                            }
+                        }
+                        /*
+                         * =================================================================
+                         * == MODIFICATION END
+                         * =================================================================
+                         */
+
+                        // Payment chosen?
                         var paymentGroup = document.querySelector('.payment-group');
                         var paymentLabel = document.querySelector('.payment-label');
-                        paymentLabel.classList.remove('text-danger');
-                        if (!paymentGroup.querySelector('input[type="radio"]:checked')) {
+                        if (paymentLabel) paymentLabel.classList.remove('text-danger');
+                        if (!paymentGroup || !paymentGroup.querySelector(
+                                'input[type="radio"]:checked')) {
                             isValid = false;
-                            paymentLabel.classList.add('text-danger');
+                            if (paymentLabel) paymentLabel.classList.add('text-danger');
                         }
 
                         if (!isValid) {
                             toastr.error(
-                                'Please fill all required fields, including a valid delivery date and payment method.'
+                                // OLD: 'Please fill all required fields. For pickup, delivery date/time are not required.'
+                                'Please fill all required fields, including date and time.' // NEW
                             );
                             window.scrollTo({
                                 top: 0,
                                 behavior: 'smooth'
                             });
-                            return; // Stop if invalid
+                            return;
                         }
 
-                        // ADDED: Re-enable address fields just before submit
+                        // re-enable address selects only when submitting for delivery
                         try {
-                            document.getElementById('region_select').disabled = false;
-                            document.getElementById('province_select').disabled = false;
-                            document.getElementById('city_select').disabled = false;
-                            // barangay_select is already enabled, so no need to touch it
+                            if (orderType === 'delivery') {
+                                ADDRESS_FIELD_IDS.forEach(id => {
+                                    const el = document.getElementById(id);
+                                    if (el) el.disabled = false;
+                                });
+                            }
                         } catch (err) {
-                            console.error("Failed to re-enable address fields", err);
+                            console.error(err);
                         }
-                        // END OF ADDED BLOCK
 
-                        submitButton.disabled = true;
-                        submitButton.innerHTML =
-                            `<span class="spinner-border spinner-border-sm"></span> Processing...`;
-                        form.submit(); // Now submit the form
+                        if (submitButton) {
+                            submitButton.disabled = true;
+                            submitButton.innerHTML =
+                                `<span class="spinner-border spinner-border-sm"></span> Processing...`;
+                        }
+                        // Final submit
+                        checkoutFormEl.submit();
                     });
+
                 }
 
                 // initial populate (keeps time disabled unless a date already exists)
                 setTimeout(populateForSelectedDate, 40);
-
-                // wire up delivery_time triggers
                 hiddenDateInput?.addEventListener('change', populateForSelectedDate);
                 if (deliveryTimeSelect) {
                     deliveryTimeSelect.addEventListener('focus', function() {
@@ -1323,8 +1420,126 @@
                     });
                 }
 
+                /* ----------------- * MODIFIED * Delivery/Pickup Toggle logic ----------------- */
+                (function setupOrderTypeToggle() {
+                    const btnDelivery = document.getElementById('btn-delivery');
+                    const btnPickup = document.getElementById('btn-pickup');
+                    const orderTypeInput = document.getElementById('order_type');
+
+                    const deliveryFields = document.getElementById('delivery-fields-container');
+                    const pickupFields = document.getElementById('pickup-fields-container');
+
+                    const infoTitle = document.getElementById('delivery-info-title');
+                    const dateLabel = document.getElementById('delivery-date-label');
+                    const timeLabel = document.getElementById('delivery-time-label');
+                    const placeOrderBtn = document.getElementById('place-order-btn');
+                    const datePickerButtonLocal = document.getElementById('date-picker-button');
+
+                    function setOrderType(type) {
+                        if (type === 'delivery') {
+                            if (btnDelivery) btnDelivery.classList.add('active');
+                            if (btnPickup) btnPickup.classList.remove('active');
+                            if (deliveryFields) deliveryFields.style.display = 'block';
+                            if (pickupFields) pickupFields.style.display = 'none';
+                            if (infoTitle) infoTitle.textContent = 'Delivery Information';
+                            if (dateLabel) dateLabel.textContent = 'Delivery Date';
+                            if (timeLabel) timeLabel.textContent = 'Delivery Time';
+                            if (placeOrderBtn) placeOrderBtn.textContent = 'Place Pre-Order';
+                            if (orderTypeInput) orderTypeInput.value = 'delivery';
+
+                            // Make address fields required
+                            ADDRESS_FIELD_IDS.forEach(id => {
+                                const el = document.getElementById(id);
+                                if (el) el.required = true;
+                            });
+
+                            /*
+                             * =================================================================
+                             * == MODIFICATION: ALWAYS require date/time + clear on toggle
+                             * =================================================================
+                             */
+                            if (deliveryTimeSelect) {
+                                deliveryTimeSelect.required = true; // Still required
+                                deliveryTimeSelect.value = ''; // Clear to force re-entry
+                                phoneInput.value = ''; // Clear to force re-entry
+                                deliveryTimeSelect.innerHTML =
+                                    '<option value="">Select delivery time</option>';
+                                deliveryTimeSelect.disabled = true; // Disable until date is picked
+                                deliveryTimeSelect.classList.remove('is-invalid', 'is-valid');
+                            }
+                            if (hiddenDateInput) {
+                                hiddenDateInput.required = true; // Still required
+                                hiddenDateInput.value = ''; // Clear to force re-entry
+                            }
+                            if (datePickerButtonLocal) {
+                                datePickerButtonLocal.textContent = 'Select a Delivery Date...';
+                                datePickerButtonLocal.classList.remove('is-valid', 'is-invalid');
+                            }
+                            /*
+                             * =================================================================
+                             * == MODIFICATION END
+                             * =================================================================
+                             */
+
+                        } else { // pickup
+                            if (btnDelivery) btnDelivery.classList.remove('active');
+                            if (btnPickup) btnPickup.classList.add('active');
+                            if (deliveryFields) deliveryFields.style.display = 'none';
+                            if (pickupFields) pickupFields.style.display = 'block';
+                            if (infoTitle) infoTitle.textContent = 'Pickup Information';
+                            if (dateLabel) dateLabel.textContent = 'Pickup Date';
+                            if (timeLabel) timeLabel.textContent = 'Pickup Time';
+                            if (placeOrderBtn) placeOrderBtn.textContent = 'Place Pre-Order - Pickup';
+                            if (orderTypeInput) orderTypeInput.value = 'pickup';
+
+                            // Address fields not required
+                            ADDRESS_FIELD_IDS.forEach(id => {
+                                const el = document.getElementById(id);
+                                if (el) el.required = false;
+                            });
+
+                            /*
+                             * =================================================================
+                             * == MODIFICATION: ALWAYS require date/time + clear on toggle
+                             * =================================================================
+                             */
+                            if (deliveryTimeSelect) {
+                                deliveryTimeSelect.required = true; // <-- WAS false
+                                deliveryTimeSelect.disabled = true; // (Correct, disable until date)
+                                deliveryTimeSelect.value = ''; // Clear to force re-entry
+                                phoneInput.value = ''; // Clear to force re-entry
+                                deliveryTimeSelect.innerHTML =
+                                    '<option value="">Select pickup time</option>';
+                                deliveryTimeSelect.classList.remove('is-invalid', 'is-valid');
+                            }
+                            if (hiddenDateInput) {
+                                hiddenDateInput.required = true; // <-- WAS false
+                                hiddenDateInput.value = ''; // Clear to force re-entry
+                            }
+                            if (datePickerButtonLocal) {
+                                datePickerButtonLocal.textContent = 'Select a Pickup Date...';
+                                datePickerButtonLocal.classList.remove('is-valid', 'is-invalid');
+                            }
+                            /*
+                             * =================================================================
+                             * == MODIFICATION END
+                             * =================================================================
+                             */
+                        }
+
+                        if (typeof populateForSelectedDate === 'function') populateForSelectedDate();
+                    }
+
+
+                    if (btnDelivery) btnDelivery.addEventListener('click', () => setOrderType('delivery'));
+                    if (btnPickup) btnPickup.addEventListener('click', () => setOrderType('pickup'));
+
+                    const oldOrderType = @json(old('order_type', 'delivery'));
+                    setOrderType(oldOrderType);
+                })();
+
             }); // end DOMContentLoaded
-        })();
+        })(); // end main IIFE
     </script>
 
 

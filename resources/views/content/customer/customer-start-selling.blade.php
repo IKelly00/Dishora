@@ -566,7 +566,7 @@
                                         $accName = old('account_name.' . $pmid, '');
                                         $isCod =
                                             $method &&
-                                            (str_contains(strtolower($method->method_name), 'cash on delivery') ||
+                                            (str_contains(strtolower($method->method_name), 'cash') ||
                                                 str_contains(strtolower($method->method_name), 'cod'));
                                     @endphp
                                     @if ($method && !$isCod)
@@ -1310,7 +1310,7 @@
                     // Validate account details for non-COD methods
                     selected.forEach(mid => {
                         const methodName = (paymentMethodMap[mid] || '').toLowerCase();
-                        const isCod = methodName.includes('cash on delivery') || methodName.includes(
+                        const isCod = methodName.includes('cash') || methodName.includes(
                             'cod');
                         if (isCod) return;
                         const accNumInput = qs(`input[name="account_number[${mid}]"]`);
@@ -1451,7 +1451,7 @@
                     if (!container) return;
                     if (container.querySelector(`[data-method-id="${id}"]`)) return;
                     const lower = name.toLowerCase();
-                    if (lower.includes('cash on delivery') || lower.includes('cod')) return;
+                    if (lower.includes('cash') || lower.includes('cod')) return;
                     const div = document.createElement('div');
                     div.className = 'payment-detail-row';
                     div.setAttribute('data-method-id', id);
@@ -1765,6 +1765,55 @@
                         }
                     }
                 }));
+
+                /* ---------- NEW: Opening Hours Logic ---------- */
+                (function() {
+                    /**
+                     * Toggles the open/close time inputs based on the status dropdown for a single row.
+                     * @param {HTMLSelectElement} select - The status <select> element that changed or is being initialized.
+                     */
+                    function toggleOpeningHours(select) {
+                        if (!select) return;
+
+                        const status = select.value; // 'open' or 'closed'
+                        const row = select.closest('tr');
+                        if (!row) return;
+
+                        // Find the inputs
+                        const openInput = row.querySelector('input[name^="open_time"]');
+                        const closeInput = row.querySelector('input[name^="close_time"]');
+
+                        // *** MODIFICATION START ***
+                        // Only act on the inputs, not the <td> cells
+                        if (openInput && closeInput) {
+                            if (status === 'closed') {
+                                // Status is Closed: Disable inputs and clear values
+                                openInput.disabled = true;
+                                closeInput.disabled = true;
+                                openInput.value =
+                                    ''; // Clearing the value should trigger your mask to show '--:-- --'
+                                closeInput.value = '';
+                            } else {
+                                // Status is Open: Enable inputs
+                                openInput.disabled = false;
+                                closeInput.disabled = false;
+                            }
+                        }
+                        // *** MODIFICATION END ***
+                    }
+
+                    // Find all status dropdowns
+                    const allStatusSelects = document.querySelectorAll('select[name^="status["]');
+
+                    allStatusSelects.forEach(select => {
+                        // 1. Add listener for changes
+                        select.addEventListener('change', (e) => toggleOpeningHours(e.target));
+
+                        // 2. Run on page load for initial state (e.g., from old() data)
+                        toggleOpeningHours(select);
+                    });
+                })();
+                /* ---------- End Opening Hours Logic ---------- */
 
 
                 /* ---------- Modal Logic ---------- */

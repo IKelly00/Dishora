@@ -62,6 +62,7 @@ class StartSellingController extends Controller
       'barangay' => 'required|string|max:255',
       'city' => 'required|string|max:255',
       'province' => 'required|string|max:255',
+      'region' => 'required|string|max:255',
       'postal_code' => 'required|string|max:20',
       'latitude' => 'required|numeric',
       'longitude' => 'required|numeric',
@@ -92,7 +93,7 @@ class StartSellingController extends Controller
       foreach ($selected as $methodId) {
         $method = $allPaymentMethods->get($methodId);
         $methodName = $method ? strtolower($method->method_name) : '';
-        $isCod = str_contains($methodName, 'cash on delivery') || str_contains($methodName, 'cod');
+        $isCod = str_contains($methodName, 'cash') || str_contains($methodName, 'cod');
 
         if ($isCod) {
           continue;
@@ -122,6 +123,7 @@ class StartSellingController extends Controller
       $validated['barangay'],
       $validated['city'],
       $validated['province'],
+      $validated['region'],
       $validated['postal_code'],
     ])->filter()->implode(', ');
 
@@ -180,7 +182,7 @@ class StartSellingController extends Controller
 
         $method = $allPaymentMethods->get($methodId);
         $methodName = $method ? strtolower($method->method_name) : '';
-        $isCod = str_contains($methodName, 'cash on delivery') || str_contains($methodName, 'cod');
+        $isCod = str_contains($methodName, 'cash') || str_contains($methodName, 'cod');
 
         if (!$isCod) {
           BusinessPmDetail::where('business_payment_method_id', $bp->business_payment_method_id)
@@ -215,7 +217,10 @@ class StartSellingController extends Controller
 
       return redirect()
         ->route('customer.start.selling')
-        ->with('success', 'Business registered successfully!');
+        ->with('success', 'Business registered successfully!')
+        ->header('Cache-Control', 'no-cache, no-store, must-revalidate') // HTTP 1.1.
+        ->header('Pragma', 'no-cache') // HTTP 1.0.
+        ->header('Expires', '0'); // Proxies.
     } catch (\Exception $e) {
       DB::rollBack();
       Log::error('Error during business registration', [

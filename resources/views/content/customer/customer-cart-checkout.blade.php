@@ -3,7 +3,6 @@
 @section('title', 'Checkout')
 
 @section('content')
-    <!-- Toastr CSS & JS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 
@@ -32,27 +31,39 @@
                 </script>
             @endif
 
-            <!-- === Checkout Form === -->
             <form id="checkoutForm" action="{{ route('checkout.store') }}" method="POST" autocomplete="off" novalidate>
                 @csrf
 
                 {{-- Hidden: business this checkout is for --}}
                 <input type="hidden" name="business_id" value="{{ $business_id }}">
 
-                {{-- === DELIVERY INFORMATION === --}}
+                {{-- === NEW: Order Type Hidden Input === --}}
+                <input type="hidden" name="order_type" id="order_type" value="delivery">
+
+
+                {{-- === NEW: Delivery/Pickup Toggle === --}}
+                <div class="order-type-toggle" role="group">
+                    <button type="button" class="btn active" id="btn-delivery">Delivery</button>
+                    <button type="button" class="btn" id="btn-pickup">Pickup</button>
+                </div>
+
+
+                {{-- === DELIVERY INFORMATION (Title is now dynamic) === --}}
                 <div class="checkout-section mb-4">
-                    <h5 class="fw-bold text-dark mb-3">Delivery Information</h5>
+                    <h5 class="fw-bold text-dark mb-3" id="delivery-info-title">Delivery Information</h5>
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="form-label">Delivery Date</label>
-                            <!-- date is forced to client's current date and readonly -->
+                            {{-- Label is now dynamic --}}
+                            <label class="form-label" id="delivery-date-label">Delivery Date</label>
+
                             <input type="date" class="form-control" name="delivery_date" id="delivery_date" required
-                                min="{{ date('Y-m-d') }}" value="{{ date('Y-m-d') }}" readonly>
+                                min="{{ date('Y-m-d') }}" readonly>
                         </div>
 
                         <div class="col-md-4">
-                            <label class="form-label">Delivery Time</label>
-                            <select class="form-select" name="delivery_time" id="delivery_time" required>
+                            {{-- Label is now dynamic --}}
+                            <label class="form-label" id="delivery-time-label">Delivery Time</label> <select
+                                class="form-select" name="delivery_time" id="delivery_time" required>
                                 <option value="">Select delivery time</option>
                                 {{-- options will be populated by JS using openingHours --}}
                             </select>
@@ -73,59 +84,88 @@
                     </div>
                 </div>
 
-                {{-- === DELIVERY ADDRESS === --}}
-                <div class="checkout-section mb-4">
-                    <h5 class="fw-bold text-dark mb-3">Delivery Address</h5>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Region</label>
-                            <select class="form-select" name="region" id="region_select" required disabled>
-                                <option value="">{{ old('region') ? old('region') : 'Select Region' }}</option>
-                            </select>
-                        </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label">Province</label>
-                            <select class="form-select" name="province" id="province_select" required disabled>
-                                <option value="">{{ old('province') ? old('province') : 'Select Province' }}</option>
-                            </select>
-                        </div>
+                {{-- === NEW: Container for Delivery-Only Fields === --}}
+                <div id="delivery-fields-container">
+                    {{-- === DELIVERY ADDRESS === --}}
+                    <div class="checkout-section mb-4">
+                        <h5 class="fw-bold text-dark mb-3">Delivery Address</h5>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Region</label>
+                                <select class="form-select" name="region" id="region_select" required disabled>
+                                    <option value="">{{ old('region') ? old('region') : 'Select Region' }}</option>
+                                </select>
+                            </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label">City / Municipality</label>
-                            <select class="form-select" name="city" id="city_select" required disabled>
-                                <option value="">{{ old('city') ? old('city') : 'Select City' }}</option>
-                            </select>
-                        </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Province</label>
+                                <select class="form-select" name="province" id="province_select" required disabled>
+                                    <option value="">{{ old('province') ? old('province') : 'Select Province' }}
+                                    </option>
+                                </select>
+                            </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label">Barangay</label>
-                            <select class="form-select" name="barangay" id="barangay_select" required disabled>
-                                <option value="">{{ old('barangay') ? old('barangay') : 'Select Barangay' }}</option>
-                            </select>
-                        </div>
+                            <div class="col-md-6">
+                                <label class="form-label">City / Municipality</label>
+                                <select class="form-select" name="city" id="city_select" required disabled>
+                                    <option value="">{{ old('city') ? old('city') : 'Select City' }}</option>
+                                </select>
+                            </div>
 
-                        <div class="col-md-9">
-                            <label class="form-label">Street Name, Building, House No.</label>
-                            <input type="text" class="form-control" name="street_name" id="street_name" required
-                                value="{{ old('street_name') ?? '' }}">
-                        </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Barangay</label>
+                                <select class="form-select" name="barangay" id="barangay_select" required disabled>
+                                    <option value="">{{ old('barangay') ? old('barangay') : 'Select Barangay' }}
+                                    </option>
+                                </select>
+                            </div>
 
-                        <div class="col-md-3">
-                            <label class="form-label">Postal Code</label>
-                            <input type="text" class="form-control" name="postal_code" id="postal_code" readonly
-                                placeholder="Auto-populated" required value="{{ old('postal_code') ?? '' }}">
+                            <div class="col-md-9">
+                                <label class="form-label">Street Name, Building, House No.</label>
+                                <input type="text" class="form-control" name="street_name" id="street_name" required
+                                    value="{{ old('street_name') ?? '' }}">
+                            </div>
+
+                            <div class="col-md-3">
+                                <label class="form-label">Postal Code</label>
+                                <input type="text" class="form-control" name="postal_code" id="postal_code" readonly
+                                    placeholder="Auto-populated" required value="{{ old('postal_code') ?? '' }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- === MAP === --}}
+                    <div class="checkout-section mb-4">
+                        <h5 class="fw-bold text-dark mb-3">Delivery Pin Location</h5>
+                        <div id="map" class="rounded shadow-sm border" style="height:400px;"></div>
+                        <input type="hidden" name="latitude" id="latitude" value="{{ old('latitude') ?? '' }}">
+                        <input type="hidden" name="longitude" id="longitude" value="{{ old('longitude') ?? '' }}">
+                    </div>
+                </div> {{-- === END: delivery-fields-container === --}}
+
+
+                {{-- === NEW: Pickup Location Section === --}}
+                <div id="pickup-fields-container" style="display: none;">
+                    <div class="checkout-section mb-4">
+                        <h5 class="fw-bold text-dark mb-3">Pickup Location</h5>
+                        <div class="p-2">
+                            <h6 class="fw-bold mb-1">{{ $vendor?->business_name ?? 'Business' }}</h6>
+
+                            {{-- === MODIFIED LINE: Added ID and changed default text === --}}
+                            <p class="mb-0 text-muted" id="pickup-address-text">
+                                @if ($vendor?->business_location)
+                                    {{ $vendor->business_location }}
+                                @else
+                                    {{-- This text will be replaced by JavaScript --}}
+                                    Pickup address not specified.
+                                @endif
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                {{-- === MAP === --}}
-                <div class="checkout-section mb-4">
-                    <h5 class="fw-bold text-dark mb-3">Delivery Pin Location</h5>
-                    <div id="map" class="rounded shadow-sm border" style="height:400px;"></div>
-                    <input type="hidden" name="latitude" id="latitude" value="{{ old('latitude') ?? '' }}">
-                    <input type="hidden" name="longitude" id="longitude" value="{{ old('longitude') ?? '' }}">
-                </div>
+                <hr class="my-3">
 
                 {{-- === ORDERS & PAYMENT (SINGLE BUSINESS) === --}}
                 <div class="checkout-section mb-5">
@@ -197,7 +237,8 @@
                                             <div class="option-tile">
                                                 <strong>{{ $method->method_name }}</strong>
                                                 @if ($method->description)
-                                                    <div class="small text-muted mt-1">{{ $method->description }}</div>
+                                                    <div class="small text-muted mt-1">
+                                                        {{ $method->description }}</div>
                                                 @endif
                                             </div>
                                         </label>
@@ -209,13 +250,12 @@
                 </div>
 
                 <div class="text-end mt-4">
-                    <button type="submit" class="btn btn-primary">Place Order</button>
+                    <button type="submit" class="btn btn-primary" id="place-order-btn">Place Order</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- === NOTE MODAL === -->
     <div class="modal fade" id="noteModal" tabindex="-1" aria-labelledby="noteModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -234,7 +274,6 @@
         </div>
     </div>
 
-    <!-- === STYLES === -->
     <style>
         .main-content-area {
             background: #fff;
@@ -273,11 +312,54 @@
             border-bottom: 2px solid #eee;
             padding-bottom: 0.5rem;
         }
+
+        /* Add these new styles inside your existing <style> block */
+        .order-type-toggle {
+            display: flex;
+            background-color: #f0f0f0;
+            border-radius: 50px;
+            /* Fully rounded capsule shape */
+            padding: 4px;
+            margin-bottom: 1.5rem;
+            width: fit-content;
+        }
+
+        .order-type-toggle .btn {
+            border: none;
+            border-radius: 50px;
+            /* Fully rounded buttons */
+            padding: 0.5rem 1.5rem;
+            font-weight: 600;
+            color: #6c757d;
+            /* Inactive color */
+            background-color: transparent;
+            /* Inactive background */
+            box-shadow: none !important;
+            /* Remove any default shadows */
+        }
+
+        .order-type-toggle .btn.active {
+            color: #0d6efd;
+            /* Active text color (Bootstrap primary) */
+            background-color: #ffffff;
+            /* Active background (white) */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+            /* Slight shadow for active */
+        }
     </style>
 
-    <!-- === SCRIPTS === -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
     @vite(['resources/js/philippine-addresses.js'])
+
+    <script>
+        // This is used by the fetchAndDisplayPickupAddress function
+        window.businessLocation = {
+            lat: {{ $vendor?->latitude ?? 'null' }},
+            lng: {{ $vendor?->longitude ?? 'null' }},
+            // Also pass the pre-filled address, if it exists
+            address: @json($vendor?->business_location)
+        };
+    </script>
     <script async
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCvpcdeUJTkj9qPV9tZDSIQB184oR8Mwrc&libraries=marker&callback=initMapNew&loading=async">
     </script>
@@ -363,7 +445,59 @@
                 streetViewControl: false
             });
             geocoder = new google.maps.Geocoder();
+
+            fetchAndDisplayPickupAddress();
         }
+
+        // === ADD THIS ENTIRE NEW FUNCTION ===
+        function fetchAndDisplayPickupAddress() {
+            const addressElement = document.getElementById('pickup-address-text');
+
+            // 1. Check if the geocoder is ready
+            if (!geocoder) {
+                console.log('Geocoder not ready yet, will try again in 1s...');
+                setTimeout(fetchAndDisplayPickupAddress, 1000); // Try again
+                return;
+            }
+
+            // 2. Check if businessLocation data was passed from PHP
+            if (!window.businessLocation) {
+                console.error('businessLocation data not found.');
+                return;
+            }
+
+            // 3. If an address was already provided by PHP, just use it. No need to geocode.
+            if (window.businessLocation.address) {
+                addressElement.textContent = window.businessLocation.address;
+                return;
+            }
+
+            // 4. If no address, but we have lat/lng, then geocode
+            if (window.businessLocation.lat && window.businessLocation.lng) {
+                const latlng = {
+                    lat: window.businessLocation.lat,
+                    lng: window.businessLocation.lng
+                };
+
+                addressElement.textContent = 'Loading address...'; // Show loading text
+
+                geocoder.geocode({
+                    'location': latlng
+                }, function(results, status) {
+                    if (status === 'OK') {
+                        if (results[0]) {
+                            addressElement.textContent = results[0].formatted_address;
+                        } else {
+                            addressElement.textContent = 'No address found for these coordinates.';
+                        }
+                    } else {
+                        console.error('Geocoder failed due to: ' + status);
+                        addressElement.textContent = 'Could not retrieve address.';
+                    }
+                });
+            }
+        }
+        // === END OF NEW FUNCTION ===
 
         async function placeDraggableMarker(lat, lng) {
             if (!window.google) {
@@ -698,7 +832,6 @@
         });
     </script>
 
-    <!-- Delivery-time: full script with cutoffMinutes support -->
     <script>
         (function() {
             // openingHours injected by Blade
@@ -795,7 +928,21 @@
                         return;
                     }
 
-                    var selectedDate = dateEl.value && dateEl.value.length ? dateEl.value : localTodayYMD();
+                    // === MODIFICATION ===
+                    // Do not default to localTodayYMD(). If date is blank, just disable time.
+                    if (!dateEl.value || !dateEl.value.length) {
+                        select.innerHTML = '';
+                        var placeholder = document.createElement('option');
+                        placeholder.value = '';
+                        placeholder.text = 'Select a date first';
+                        placeholder.disabled = true;
+                        placeholder.selected = true;
+                        select.appendChild(placeholder);
+                        select.disabled = true;
+                        return;
+                    }
+
+                    var selectedDate = dateEl.value;
                     var dayKey = weekdayKeyFromYMD(selectedDate);
                     console.debug('[delivery-time] populateForSelectedDate', {
                         selectedDate: selectedDate,
@@ -989,22 +1136,72 @@
             // final validation guard before submit
             function validateBeforeSubmit(ev) {
                 try {
+                    // === NEW: Check order type ===
+                    var orderType = document.getElementById('order_type') ? document.getElementById('order_type')
+                        .value : 'delivery';
+
                     var dateEl = document.getElementById('delivery_date');
                     var sel = document.getElementById('delivery_time');
+
+                    // =================================================================
+                    // == MODIFICATION: Add check for empty date
+                    // =================================================================
+                    if (!dateEl || !dateEl.value) {
+                        ev.preventDefault();
+                        (typeof toastr !== 'undefined') ? toastr.error('Please select a ' + orderType + ' date.'):
+                            alert('Please select a ' + orderType + ' date.');
+                        return false;
+                    }
+                    // =================================================================
+                    // == END MODIFICATION
+                    // =================================================================
+
                     var dateVal = dateEl && dateEl.value ? dateEl.value : localTodayYMD();
 
                     if (!sel || sel.disabled) {
                         ev.preventDefault();
                         (typeof toastr !== 'undefined') ? toastr.error(
-                            'No delivery times available for the selected date.'): alert(
-                            'No delivery times available for the selected date.');
+                            'No ' + orderType + ' times available for the selected date.'): alert(
+                            'No ' + orderType + ' times available for the selected date.');
                         return false;
                     }
                     if (!sel.value) {
                         ev.preventDefault();
-                        (typeof toastr !== 'undefined') ? toastr.error('Please select a delivery time.'): alert(
-                            'Please select a delivery time.');
+                        (typeof toastr !== 'undefined') ? toastr.error('Please select a ' + orderType + ' time.'):
+                            alert(
+                                'Please select a ' + orderType + ' time.');
                         return false;
+                    }
+
+                    try {
+                        // === MODIFIED: Only re-enable for delivery ===
+                        if (orderType === 'delivery') {
+                            document.getElementById('region_select').disabled = false;
+                            document.getElementById('province_select').disabled = false;
+                            document.getElementById('city_select').disabled = false;
+                        }
+                    } catch (e) {}
+
+                    // === NEW: Add validation for address fields *ONLY IF DELIVERY* ===
+                    if (orderType === 'delivery') {
+                        const street = document.getElementById('street_name');
+                        const brgy = document.getElementById('barangay_select');
+                        const city = document.getElementById('city_select');
+                        const lat = document.getElementById('latitude');
+
+                        if (!street || !street.value || !brgy || !brgy.value || !city || !city.value) {
+                            ev.preventDefault();
+                            (typeof toastr !== 'undefined') ? toastr.error(
+                                'Please complete all delivery address fields.'): alert(
+                                'Please complete all delivery address fields.');
+                            return false;
+                        }
+                        if (!lat || !lat.value) {
+                            ev.preventDefault();
+                            (typeof toastr !== 'undefined') ? toastr.error('Please pin your location on the map.'):
+                                alert('Please pin your location on the map.');
+                            return false;
+                        }
                     }
 
                     // final server-safe checks (same-day buffer & inside hours & cutoff)
@@ -1048,11 +1245,13 @@
                         }
                     }
 
-                    // Re-enable address fields just before submit so their values are sent
+                    // Re-enable address fields just before submit so their values are sent (if delivery)
                     try {
-                        document.getElementById('region_select').disabled = false;
-                        document.getElementById('province_select').disabled = false;
-                        document.getElementById('city_select').disabled = false;
+                        if (orderType === 'delivery') {
+                            document.getElementById('region_select').disabled = false;
+                            document.getElementById('province_select').disabled = false;
+                            document.getElementById('city_select').disabled = false;
+                        }
                     } catch (e) {}
 
                     return true;
@@ -1071,13 +1270,18 @@
                     var dateEl = document.getElementById('delivery_date');
                     if (dateEl) {
                         var today = localTodayYMD();
+                        // =================================================================
+                        // == MODIFICATION: Set delivery date to today on load per request
                         dateEl.value = today;
+                        // =================================================================
                         dateEl.min = today;
                     }
                 } catch (e) {}
 
-                // initial populate
+                // =================================================================
+                // == MODIFICATION: Re-enable initial auto-populate since date is now set
                 setTimeout(populateForSelectedDate, 40);
+                // =================================================================
 
                 // re-populate only when date changes
                 var dEl = document.getElementById('delivery_date');
@@ -1106,6 +1310,133 @@
         })();
     </script>
 
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // =================================================================
+            // === MODIFICATION 2: Remove the definition from here ===
+            // =================================================================
+            // window.businessLocation = { ... }; // <-- This block was removed
+            // =================================================================
+            // === END MODIFICATION 2 ===
+            // =================================================================
 
 
+            // --- Delivery/Pickup Toggle Logic ---
+            const btnDelivery = document.getElementById('btn-delivery');
+            const btnPickup = document.getElementById('btn-pickup');
+            const orderTypeInput = document.getElementById('order_type');
+
+            const deliveryFields = document.getElementById('delivery-fields-container');
+            const pickupFields = document.getElementById('pickup-fields-container');
+
+            const infoTitle = document.getElementById('delivery-info-title');
+            const dateLabel = document.getElementById('delivery-date-label');
+            const timeLabel = document.getElementById('delivery-time-label');
+            const placeOrderBtn = document.getElementById('place-order-btn');
+
+            // Address fields to make non-required for pickup
+            const addressFields = [
+                'region_select', 'province_select', 'city_select',
+                'barangay_select', 'street_name', 'postal_code'
+            ];
+
+            // =================================================================
+            // == MODIFICATION: Get handles for date/time inputs
+            // =================================================================
+            const deliveryDateInput = document.getElementById('delivery_date');
+            const deliveryTimeSelect = document.getElementById('delivery_time');
+            // =================================================================
+            // == END MODIFICATION
+            // =================================================================
+
+            function setOrderType(type) {
+                if (type === 'delivery') {
+                    // Update UI
+                    btnDelivery.classList.add('active');
+                    btnPickup.classList.remove('active');
+                    deliveryFields.style.display = 'block';
+                    pickupFields.style.display = 'none';
+
+                    // Update labels
+                    infoTitle.textContent = 'Delivery Information';
+                    dateLabel.textContent = 'Delivery Date';
+                    timeLabel.textContent = 'Delivery Time';
+                    placeOrderBtn.textContent = 'Place Order';
+
+                    // Set hidden input
+                    orderTypeInput.value = 'delivery';
+
+                    // Make address fields required
+                    addressFields.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.required = true;
+                    });
+
+                    // =================================================================
+                    // == MODIFICATION: Always require date/time, but don't clear them
+                    // on 'delivery' toggle. This respects the initial page-load value.
+                    // Clearing is handled by 'pickup' toggle.
+                    // =================================================================
+                    if (deliveryDateInput) {
+                        deliveryDateInput.required = true;
+                        // deliveryDateInput.value = ''; // <-- REMOVED per request
+                    }
+                    if (deliveryTimeSelect) {
+                        deliveryTimeSelect.required = true; // Still required for pickup
+                        deliveryTimeSelect.value = ''; // Clear time
+                        deliveryTimeSelect.innerHTML = '<option value="">Select delivery time</option>';
+
+                    }
+                    // =================================================================
+                    // == END MODIFICATION
+                    // =================================================================
+
+                } else if (type === 'pickup') {
+                    // Update UI
+                    btnDelivery.classList.remove('active');
+                    btnPickup.classList.add('active');
+                    deliveryFields.style.display = 'none';
+                    pickupFields.style.display = 'block';
+
+                    // Update labels
+                    infoTitle.textContent = 'Pickup Information';
+                    dateLabel.textContent = 'Pickup Date';
+                    timeLabel.textContent = 'Pickup Time';
+                    placeOrderBtn.textContent = 'Place Order - Pickup';
+
+                    // Set hidden input
+                    orderTypeInput.value = 'pickup';
+
+                    // Make address fields NOT required
+                    addressFields.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.required = false;
+                    });
+
+                    // =================================================================
+                    // == MODIFICATION: Always require and clear date/time (This is per request)
+                    // =================================================================
+                    if (deliveryDateInput) {
+                        deliveryDateInput.required = true; // Still required for pickup
+                    }
+                    if (deliveryTimeSelect) {
+                        deliveryTimeSelect.required = true; // Still required for pickup
+                        deliveryTimeSelect.value = ''; // Clear time
+                        deliveryTimeSelect.innerHTML = '<option value="">Select pickup time</option>';
+                    }
+                    // =================================================================
+                    // == END MODIFICATION
+                    // =================================================================
+                }
+            }
+
+            // Add event listeners
+            btnDelivery.addEventListener('click', () => setOrderType('delivery'));
+            btnPickup.addEventListener('click', () => setOrderType('pickup'));
+
+            // Set initial state based on old input (if validation fails)
+            const oldOrderType = @json(old('order_type', 'delivery'));
+            setOrderType(oldOrderType);
+        });
+    </script>
 @endsection

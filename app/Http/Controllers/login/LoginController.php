@@ -212,7 +212,7 @@ class LoginController extends Controller
   public function checkVendorStatus()
   {
 
-    Log::info('checkVendorStatus method');
+    //Log::info('checkVendorStatus method');
 
     $user = Auth::user();
 

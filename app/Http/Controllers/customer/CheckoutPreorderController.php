@@ -8,7 +8,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Exception;
+
 use App\Models\{
   Order,
   OrderItem,
@@ -19,48 +21,41 @@ use App\Models\{
   Customer,
   PaymentMethod,
   CheckoutDraft,
-  User
+  User,
+  PreOrder,
+  PreorderSchedule
 };
-
-use App\Models\PreOrder;
-use App\Models\PreorderSchedule;
-use Illuminate\Support\Facades\Storage;
 
 class CheckoutPreorderController extends Controller
 {
   /**
-   * Entry point for preorder checkout
+   * Entry point for preorder checkout (renders checkout view for a business).
    */
   public function proceed($business_id)
   {
-    // --- Initial Setup (Get session items and product details) ---
+    Log::info('Entered proceed()', ['method' => __METHOD__, 'user_id' => Auth::id(), 'business_id' => $business_id]);
+
+    // Load session preorders and product records
     $allPreorders = collect(session('preorder', []));
-    $productIds = $allPreorders->pluck('product_id');
+    $productIds = $allPreorders->pluck('product_id')->unique();
     $products = Product::with('business')->whereIn('product_id', $productIds)->get()->keyBy('product_id');
 
-    // Filter session items for the specific business we are checking out
+    // Keep only items that belong to the requested business
     $itemsForBusiness = $allPreorders->filter(function ($item) use ($business_id, $products) {
       return isset($products[$item['product_id']]) && $products[$item['product_id']]->business_id == $business_id;
     });
 
-    // --- STATE A: NORMAL CHECKOUT (No pending DB order found) ---
-
-    // Check if there are items for this business in the session
     if ($itemsForBusiness->isEmpty()) {
+      Log::warning('No session items found for business in proceed()', ['method' => __METHOD__, 'business_id' => $business_id, 'user_id' => Auth::id()]);
       return redirect()->route('customer.preorder')->with('error', 'No items found for this business.');
     }
 
-    Log::debug('Proceeding to normal checkout with session items.', [
-      'user_id' => Auth::id(),
-      'business_id' => $business_id
-    ]);
+    Log::debug('Preparing checkout calculation', ['method' => __METHOD__, 'items_count' => $itemsForBusiness->count()]);
 
-    // Use the filtered session items for checkout calculations
+    // Calculate totals and advance requirements
     $checkoutPreorder = $itemsForBusiness;
-
-    // --- Compute totals ONLY for the items being checked out now ---
-    $total = 0;
-    $totalAdvanceRequired = 0;
+    $total = 0.0;
+    $totalAdvanceRequired = 0.0;
     $advance_breakdown = [];
     $requires_advance = false;
 
@@ -68,9 +63,9 @@ class CheckoutPreorderController extends Controller
       if (!isset($products[$i['product_id']])) continue;
 
       $p = $products[$i['product_id']];
-      $price  = (float) $p->price;
-      $advAmt = (float) ($p->advance_amount ?? 0);
-      $qty    = (int)   $i['quantity'];
+      $price = (float) ($p->price ?? 0.0);
+      $advAmt = (float) ($p->advance_amount ?? 0.0);
+      $qty = (int) ($i['quantity'] ?? 0);
 
       $total += $price * $qty;
 
@@ -82,33 +77,42 @@ class CheckoutPreorderController extends Controller
       }
     }
 
-    // Filter out unavailable items after calculation
+    // Remove unavailable items
     $checkoutPreorder = $checkoutPreorder->filter(function ($i) use ($products) {
-      return isset($products[$i['product_id']]) && $products[$i['product_id']]->is_available;
+      return isset($products[$i['product_id']]) && ($products[$i['product_id']]->is_available ?? false);
     })->values();
 
     if ($checkoutPreorder->isEmpty()) {
+      Log::warning('All items unavailable after filtering in proceed()', ['method' => __METHOD__, 'business_id' => $business_id]);
       return redirect()->route('customer.preorder')->with('error', 'All items for this business are currently unavailable.');
     }
 
-    // Fetch user, customer, vendors, opening hours (unchanged)
+    // Load user, customer, vendor, and opening hours
     $user = Auth::user();
     $customer = Customer::where('user_id', $user->user_id)->first();
     $vendors = BusinessDetail::with(['paymentMethods' => fn($q) => $q->where('status', 'active')])
       ->where('business_id', $business_id)->get()->keyBy('business_id');
+    $business = $vendors->get($business_id);
 
     $opening = \App\Models\BusinessOpeningHour::where('business_id', $business_id)->get();
     $openingHours = [];
     foreach ($opening as $row) {
       $key = strtolower($row->day_of_week);
       $openingHours[$key] = [
-        'opens_at'  => $row->opens_at ? substr($row->opens_at, 0, 8) : null,
+        'opens_at' => $row->opens_at ? substr($row->opens_at, 0, 8) : null,
         'closes_at' => $row->closes_at ? substr($row->closes_at, 0, 8) : null,
         'is_closed' => (bool) $row->is_closed,
       ];
     }
 
-    // --- Return the normal checkout view ---
+    Log::info('Rendering preorder checkout view', [
+      'method' => __METHOD__,
+      'user_id' => $user->user_id,
+      'business_id' => $business_id,
+      'total' => $total,
+      'total_advance_required' => $totalAdvanceRequired,
+    ]);
+
     return view('content.customer.customer-preorder-checkout', [
       'upload_mode'            => false,
       'business_id'            => $business_id,
@@ -118,58 +122,72 @@ class CheckoutPreorderController extends Controller
       'fullName'               => $user?->fullname,
       'contactNumber'          => $customer?->contact_number,
       'vendors'                => $vendors,
+      'business'               => $business,
       'total'                  => $total,
       'total_advance_required' => $totalAdvanceRequired,
       'advance_breakdown'      => $advance_breakdown,
       'requires_advance'       => $requires_advance,
       'openingHours'           => $openingHours,
-      'order'                  => null, // Required by Blade
-      'preorder'               => null, // Required by Blade
+      'order'                  => null,
+      'preorder'               => null,
     ]);
   }
 
-  // You still need the helper method for clearing transactions if called elsewhere,
-  // but the proceed() method no longer calls it directly in the main flow.
+  /**
+   * Clear transaction_id from session items (helper).
+   */
   private function clearTransactionFromSession($transactionId)
   {
-    if (!$transactionId) return;
+    if (empty($transactionId)) {
+      return;
+    }
+
+    Log::debug('clearTransactionFromSession called', ['method' => __METHOD__, 'transaction_id' => $transactionId]);
 
     $currentPreorders = collect(session('preorder', []));
     $cleanedPreorders = $currentPreorders->map(function ($item) use ($transactionId) {
       if (isset($item['transaction_id']) && $item['transaction_id'] == $transactionId) {
         unset($item['transaction_id']);
-        Log::debug('Cleared transaction_id from session item', ['product_id' => $item['product_id'] ?? null]);
+        Log::debug('Cleared transaction_id from session item', ['method' => __METHOD__, 'product_id' => $item['product_id'] ?? null]);
       }
       return $item;
     })->all();
+
     session(['preorder' => $cleanedPreorders]);
-    Log::info('Attempted to clear transaction from session', ['transaction_id' => $transactionId]);
+    Log::info('Attempted to clear transaction from session', ['method' => __METHOD__, 'transaction_id' => $transactionId]);
   }
 
   /**
-   * Store preorder checkout (COD + online)
+   * Store preorder checkout (COD + online).
    */
   public function store(Request $request)
   {
+    Log::info('Entered store()', ['method' => __METHOD__, 'user_id' => Auth::id()]);
+
     $request->validate([
       'business_id'    => 'required|integer|exists:business_details,business_id',
+      'order_type'     => 'required|in:delivery,pickup',
       'delivery_date'  => 'required|date|after_or_equal:tomorrow',
       'delivery_time'  => 'required|string',
       'full_name'      => 'required|string|max:255',
       'phone_number'   => ['required', 'regex:/^09\d{9}$/'],
-      'region'         => 'required|string|max:100',
-      'province'       => 'required|string|max:100',
-      'city'           => 'required|string|max:100',
-      'barangay'       => 'required|string|max:100',
-      'postal_code'    => 'required|string|max:20',
-      'street_name'    => 'required|string|max:255',
+
+      'region'         => 'required_if:order_type,delivery|nullable|string|max:100',
+      'province'       => 'required_if:order_type,delivery|nullable|string|max:100',
+      'city'           => 'required_if:order_type,delivery|nullable|string|max:100',
+      'barangay'       => 'required_if:order_type,delivery|nullable|string|max:100',
+      'postal_code'    => 'required_if:order_type,delivery|nullable|string|max:20',
+      'street_name'    => 'required_if:order_type,delivery|nullable|string|max:255',
+
       'payment_option' => 'nullable|in:advance,full',
       'payment_method' => 'required|integer|exists:payment_methods,payment_method_id',
     ]);
 
     $user = Auth::user();
     $preorders = collect(session('preorder', []));
+
     if ($preorders->isEmpty()) {
+      Log::warning('Attempt to store with empty session preorder', ['method' => __METHOD__, 'user_id' => $user->user_id]);
       return back()->withErrors(['error' => 'Your preorder list is empty.']);
     }
 
@@ -181,27 +199,23 @@ class CheckoutPreorderController extends Controller
         fn($i) =>
         isset($products[$i['product_id']]) &&
           $products[$i['product_id']]->business_id == $businessId &&
-          $products[$i['product_id']]->is_available
+          ($products[$i['product_id']]->is_available ?? false)
       )
       ->map(function ($i) use ($businessId, $products) {
         $p = $products[$i['product_id']];
         $i['business_id'] = $businessId;
-        // Ensure the item carries the price at time of checkout
         $i['price'] = (float) ($p->price ?? 0);
         return $i;
       })
       ->values();
 
-
     if ($items->isEmpty()) {
+      Log::warning('No available items for vendor in store()', ['method' => __METHOD__, 'business_id' => $businessId]);
       return back()->withErrors(['error' => 'No available preorder products for this vendor.']);
     }
 
-    $total = $items->sum(fn($i) => $products[$i['product_id']]->price * $i['quantity']);
-    $totalAdvanceRequired = $items->sum(
-      fn($i) =>
-      $products[$i['product_id']]->advance_amount * $i['quantity']
-    );
+    $total = $items->sum(fn($i) => ($products[$i['product_id']]->price ?? 0) * $i['quantity']);
+    $totalAdvanceRequired = $items->sum(fn($i) => ($products[$i['product_id']]->advance_amount ?? 0) * $i['quantity']);
 
     $deliveryData = $request->only([
       'delivery_date',
@@ -219,55 +233,44 @@ class CheckoutPreorderController extends Controller
     ]);
     $deliveryData['user_id'] = $user->user_id;
     $deliveryData['payment_option'] = $request->payment_option;
-    //$deliveryData['requires_receipt'] = ($totalAdvanceRequired > 0);
     $deliveryData['requires_receipt'] = true;
-
+    $deliveryData['order_type'] = $request->input('order_type');
 
     $pmId = $request->payment_method;
     $pm = PaymentMethod::findOrFail($pmId);
     $methodName = strtolower(trim($pm->method_name));
-    $isCod = in_array($methodName, ['cash on delivery', 'cod', 'card on delivery']);
+    $isCod = in_array($methodName, ['cash', 'cod', 'card on delivery']);
     $itemNotes = $request->input('item_notes', []);
 
-    // If user selected a COD method but an advance is required, force GCash as the payment method.
+    // If COD chosen but advances required -> try to override to GCash
     if ($isCod && $totalAdvanceRequired > 0) {
-      Log::info('COD selected but advance required — forcing GCash as default payment method', [
+      Log::info('COD chosen while advances required; attempting to override payment method', [
+        'method' => __METHOD__,
         'user_id' => $user->user_id,
         'original_payment_method_id' => $pmId,
-        'totalAdvanceRequired' => $totalAdvanceRequired,
+        'totalAdvanceRequired' => $totalAdvanceRequired
       ]);
-
-      // Try to find a payment method named "gcash" (case-insensitive).
       $gcash = PaymentMethod::whereRaw('LOWER(method_name) = ?', ['gcash'])->first();
-
       if ($gcash) {
         $pmId = $gcash->payment_method_id;
         $pm = $gcash;
         $methodName = 'gcash';
-        Log::info('Overrode payment method to GCash', ['gcash_id' => $pmId]);
+        Log::info('Payment method overridden to GCash', ['method' => __METHOD__, 'gcash_id' => $pmId]);
       } else {
-        // fallback: keep original and log a warning so you can configure GCash in DB
-        Log::warning('GCash payment method not found — cannot override COD to GCash', [
-          'user_id' => $user->user_id,
-          'original_payment_method_id' => $request->payment_method,
-        ]);
+        Log::warning('GCash payment method not found to override COD', ['method' => __METHOD__]);
       }
     }
 
     DB::beginTransaction();
     try {
-      Log::debug('Creating CheckoutDraft', ['user_id' => $user->user_id, 'business_id' => $businessId]);
+      Log::debug('Creating CheckoutDraft', ['method' => __METHOD__, 'user_id' => $user->user_id, 'business_id' => $businessId]);
 
-      // Decide payment option and compute EXACT amount to charge now (without persisting)
       $paymentOption = $request->payment_option ?? ($totalAdvanceRequired <= 0 ? 'full' : 'advance');
-
-      // Ensure the delivery payload saved into the draft reflects the chosen payment option
       $deliveryData['payment_option'] = $paymentOption;
 
       if ($paymentOption === 'full') {
         $amountToCharge = $total;
       } else {
-        // sum only advances for items that actually have advance_amount > 0
         $amountToCharge = $items->reduce(function ($carry, $i) use ($products) {
           $p = $products[$i['product_id']];
           $adv = (float)($p->advance_amount ?? 0);
@@ -276,7 +279,6 @@ class CheckoutPreorderController extends Controller
         }, 0.0);
       }
 
-      // Create the draft (we store payment_option inside delivery already)
       $draft = CheckoutDraft::create([
         'user_id'           => $user->user_id,
         'payment_method_id' => $pmId,
@@ -287,27 +289,25 @@ class CheckoutPreorderController extends Controller
         'is_cod'            => $isCod,
       ]);
 
-      // If it's COD and no advance is required, process immediately —
-      // but only when we do NOT require a receipt. If requires_receipt is true
-      // we must wait for receipt upload before processing/removing items.
-      if ($isCod && $totalAdvanceRequired <= 0 && empty($deliveryData['requires_receipt'])) {
+      Log::info('CheckoutDraft created', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id, 'amountToCharge' => $amountToCharge]);
 
-        Log::info('Processing COD preorder immediately', ['draft_id' => $draft->checkout_draft_id]);
+      // Immediate processing for pure COD with no advance and no receipt requirement
+      if ($isCod && $totalAdvanceRequired <= 0 && empty($deliveryData['requires_receipt'])) {
+        Log::info('Processing immediate COD order from draft', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id]);
         $this->processCodOrderFromDraft($draft);
         $draft->update(['processed_at' => now()]);
         DB::commit();
         $this->removeProcessedItemsFromPreorder(collect([$draft]));
         return redirect()->route('customer.orders.index')
-          ->with('success', 'Your preorder has been placed successfully (Cash on Delivery).');
+          ->with('success', 'Your preorder has been placed successfully (Cash).')
+          ->header('Cache-Control', 'no-cache, no-store, must-revalidate') // HTTP 1.1.
+          ->header('Pragma', 'no-cache') // HTTP 1.0.
+          ->header('Expires', '0');
       }
 
-      // Build PayMongo line items.
-      // IMPORTANT:
-      //  - when paymentOption === 'advance' we only include products that have advance_amount > 0
-      //  - each line is aggregated (amount = unit * qty) and quantity = 1 so PayMongo shows a single amount per product
-      // Build PayMongo line items properly
+      // Build PayMongo line items
       $lineItems = $items->map(function ($i) use ($paymentOption, $products) {
-        $product = $products[$i['product_id']];
+        $product = $products[$i['product_id']] ?? null;
         if (!$product) return null;
 
         $qty = (int)$i['quantity'];
@@ -315,46 +315,32 @@ class CheckoutPreorderController extends Controller
         if ($paymentOption === 'full') {
           $unitAmount = (float)$product->price;
         } else {
-          // advance selected → charge advance only if defined; skip if 0
           $unitAmount = (float)($product->advance_amount ?? 0);
           if ($unitAmount <= 0) return null;
         }
 
-        // Build friendly label
-        if ($paymentOption === 'advance' && $product->advance_amount > 0) {
-          $label = sprintf(
-            "%s — Advance (₱%s)",
-            $product->item_name,
-            number_format($product->advance_amount, 2),
-            number_format($product->price, 2)
-          );
+        if ($paymentOption === 'advance' && ($product->advance_amount ?? 0) > 0) {
+          $label = sprintf("%s — Advance (₱%s)", $product->item_name, number_format($product->advance_amount, 2));
         } else {
-          $label = sprintf(
-            "%s — Full (₱%s)",
-            $product->item_name,
-            number_format($product->price, 2)
-          );
+          $label = sprintf("%s — Full (₱%s)", $product->item_name, number_format($product->price, 2));
         }
 
         return [
           'name'     => $label,
-          'amount'   => intval(round($unitAmount * 100, 0)), // PayMongo expects per-unit amount in centavos
+          'amount'   => intval(round($unitAmount * 100, 0)),
           'currency' => 'PHP',
           'quantity' => $qty,
         ];
       })->filter()->values()->all();
 
-      // If amountToCharge is effectively zero (e.g. user chose 'advance' but no advances exist),
-      // treat as paying full price
+      // Fallback: if amountToCharge is zero, treat as full payment
       if ($amountToCharge <= 0) {
         $amountToCharge = $total;
-        // rebuild line items to charge full amount for all items (safe fallback)
         $lineItems = $items->map(function ($i) use ($products) {
           $product = $products[$i['product_id']];
           $qty = (int)$i['quantity'];
-          $label = sprintf("%s — Full (₱%s)", $product->item_name, number_format($product->price, 2));
           return [
-            'name' => $label,
+            'name' => sprintf("%s — Full (₱%s)", $product->item_name, number_format($product->price, 2)),
             'amount' => intval(round($product->price * $qty * 100, 0)),
             'currency' => 'PHP',
             'quantity' => 1,
@@ -362,7 +348,7 @@ class CheckoutPreorderController extends Controller
         })->values()->all();
       }
 
-      $business   = BusinessDetail::find($businessId);
+      $business = BusinessDetail::find($businessId);
       $successUrl = route('payment.callback.success');
       $cancelUrl = route('payment.callback.failed', ['draft_id' => $draft->checkout_draft_id]);
 
@@ -374,7 +360,7 @@ class CheckoutPreorderController extends Controller
         'data' => ['attributes' => [
           'line_items'           => $lineItems,
           'payment_method_types' => [$this->getPayMongoGatewayType($methodName, $pm)],
-          'description'          => 'Pre-Order payment for ' . $business?->business_name,
+          'description'          => 'Pre-Order payment for ' . ($business?->business_name ?? 'Vendor'),
           'statement_descriptor' => 'MyMarketplace',
           'success_url'          => $successUrl,
           'cancel_url'           => $cancelUrl,
@@ -387,17 +373,16 @@ class CheckoutPreorderController extends Controller
 
       $data = $response->json();
       if (!isset($data['data'])) {
-        Log::error('PayMongo response error', ['response' => $data]);
+        Log::error('PayMongo response missing data', ['method' => __METHOD__, 'response' => $data]);
         throw new Exception("PayMongo error: " . ($data['errors'][0]['detail'] ?? 'Unknown'));
       }
 
-      $checkoutUrl     = $data['data']['attributes']['checkout_url'];
+      $checkoutUrl = $data['data']['attributes']['checkout_url'];
       $paymentIntentId = $data['data']['attributes']['payment_intent']['id'];
 
-      // Save transaction id on draft so webhook can find it later
       $draft->update(['transaction_id' => $paymentIntentId]);
 
-      // mark related session items as pending using transaction id
+      // Mark related session items as pending with transaction id
       $productIdsInTransaction = $items->pluck('product_id')->all();
       $currentPreorders = collect(session('preorder', []));
       $updatedPreorders = $currentPreorders->map(function ($sessionItem) use ($productIdsInTransaction, $paymentIntentId) {
@@ -408,86 +393,40 @@ class CheckoutPreorderController extends Controller
       })->all();
       session(['preorder' => $updatedPreorders]);
 
-      // Store flow info
+      // Store flow info to session
       session([
         'checkout_flow_draft_ids' => [$draft->checkout_draft_id],
         'checkout_flow_type'      => 'preorder',
       ]);
 
       DB::commit();
-      Log::info('Redirecting to PayMongo', ['draft_id' => $draft->checkout_draft_id, 'amount_charged' => $amountToCharge]);
+      Log::info('Redirecting to PayMongo checkout', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id, 'amount_charged' => $amountToCharge]);
       return redirect()->away($checkoutUrl);
     } catch (Exception $e) {
       DB::rollBack();
       Log::error('Preorder checkout failed', [
+        'method' => __METHOD__,
         'message' => $e->getMessage(),
-        'trace'   => $e->getTraceAsString(),
+        'trace' => $e->getTraceAsString(),
       ]);
       return back()->withErrors(['error' => 'Preorder checkout failed. Please try again.']);
     }
   }
 
-  private function createPendingOrderFromDraft(CheckoutDraft $draft)
-  {
-    return DB::transaction(function () use ($draft) {
-      $businessId = collect($draft->cart)->pluck('business_id')->first();
-      Log::info('Creating PENDING order from draft before payment', ['draft_id' => $draft->checkout_draft_id]);
 
-      $order = Order::create([
-        'user_id'           => $draft->user_id,
-        'business_id'       => $businessId,
-        'total'             => $draft->total,
-        'delivery_date'     => $draft->delivery['delivery_date'],
-        'delivery_time'     => $draft->delivery['delivery_time'] ?? now()->format('H:i:s'),
-        'payment_method_id' => $draft->payment_method_id,
-        'status'            => 'pending_payment', // Set an initial status
-      ]);
-
-      foreach ($draft->cart as $item) {
-        $product = Product::find($item['product_id']);
-        if (!$product) throw new Exception("Product {$item['product_id']} not found");
-
-        OrderItem::create([
-          'order_id'            => $order->order_id,
-          'product_id'          => $product->product_id,
-          'product_name'        => $product->item_name,
-          'product_description' => $product->description,
-          'quantity'            => (int)$item['quantity'],
-          'price_at_order_time' => $item['price'],
-          'order_item_status'   => 'Pending',
-          'order_item_note'     => $draft->item_notes[$product->product_id] ?? null,
-          'is_pre_order'        => true,
-        ]);
-      }
-
-      DeliveryAddress::create(array_merge($draft->delivery, [
-        'order_id'     => $order->order_id,
-        'full_address' => collect($draft->delivery)->except('user_id')->filter()->reverse()->join(', '),
-      ]));
-
-      // Create the PaymentDetail record with a 'Pending' status.
-      // The webhook will find and update this record.
-      PaymentDetail::create([
-        'order_id'           => $order->order_id,
-        'payment_method_id'  => $draft->payment_method_id,
-        'transaction_id'     => $draft->transaction_id, // This holds the payment_intent_id
-        'amount_paid'        => 0,
-        'payment_status'     => 'Pending', // CRUCIAL
-        'paid_at'            => null,
-      ]);
-
-      return $order;
-    });
-  }
-
+  /**
+   * Process a COD draft and create order/payment/preorder records.
+   */
   public function processCodOrderFromDraft(CheckoutDraft $draft)
   {
+    Log::info('processCodOrderFromDraft called', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id]);
+
     if (!$draft->is_cod) {
       throw new Exception("Draft {$draft->checkout_draft_id} is not a COD order");
     }
 
     if ($draft->processed_at) {
-      Log::warning('Attempting to process an already processed COD draft', ['draft_id' => $draft->checkout_draft_id]);
+      Log::warning('Draft already processed', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id]);
       return;
     }
 
@@ -497,8 +436,9 @@ class CheckoutPreorderController extends Controller
     }
 
     $businessId = collect($draft->cart)->pluck('business_id')->unique()->first();
+    $orderType = $draft->delivery['order_type'] ?? 'delivery';
 
-    DB::transaction(function () use ($user, $draft, $businessId) {
+    DB::transaction(function () use ($user, $draft, $businessId, $orderType) {
       $deliveryTime = $draft->delivery['delivery_time'] ?? now()->format('H:i:s');
 
       $order = Order::create([
@@ -527,12 +467,52 @@ class CheckoutPreorderController extends Controller
         $totalAdvanceRequired += ((float)$prod->advance_amount * (int)$item['quantity']);
       }
 
-      DeliveryAddress::create(array_merge($draft->delivery, [
-        'order_id' => $order->order_id,
-        'full_address' => collect($draft->delivery)->except('user_id')->filter()->reverse()->join(', ')
-      ]));
+      // Normalize delivery payload and ensure columns are set/nullable as required
+      $delivery = $draft->delivery ?? [];
 
-      // Create initial PaymentDetail
+      $deliveryPayload = [
+        'order_id'       => $order->order_id,
+        'user_id'        => $draft->user_id,
+        'full_name'      => $delivery['full_name'] ?? null,
+        'phone_number'   => $delivery['phone_number'] ?? null,
+        'region'         => $delivery['region'] ?? null,
+        'province'       => $delivery['province'] ?? null,
+        'city'           => $delivery['city'] ?? null,
+        'barangay'       => $delivery['barangay'] ?? null,
+        'street_name'    => $delivery['street_name'] ?? null,
+        'postal_code'    => $delivery['postal_code'] ?? null,
+        'latitude'       => $delivery['latitude'] ?? null,
+        'longitude'      => $delivery['longitude'] ?? null,
+        'payment_option' => $delivery['payment_option'] ?? null,
+        'requires_receipt' => $delivery['requires_receipt'] ?? null,
+        'order_type'     => $delivery['order_type'] ?? null,
+        'full_address'   => null,
+      ];
+
+      // If this is a delivery order, compute full_address and keep address fields.
+      // Otherwise (e.g., pickup), explicitly null the address fields (only phone/name remain).
+      if ($orderType === 'delivery') {
+        $deliveryPayload['full_address'] = collect($delivery)
+          ->except('user_id', 'order_type', 'payment_option', 'requires_receipt')
+          ->filter()
+          ->reverse()
+          ->join(', ');
+      } else {
+        // ensure address-specific columns are null for non-delivery orders
+        foreach (['region', 'province', 'city', 'barangay', 'street_name', 'postal_code', 'latitude', 'longitude', 'full_address'] as $k) {
+          $deliveryPayload[$k] = null;
+        }
+      }
+
+      DeliveryAddress::create($deliveryPayload);
+
+      Log::debug('DeliveryAddress inserted', [
+        'method' => __METHOD__,
+        'order_id' => $order->order_id,
+        'user_id' => $deliveryPayload['user_id'],
+        'order_type' => $deliveryPayload['order_type'] ?? 'delivery',
+      ]);
+
       $paymentDetail = PaymentDetail::create([
         'order_id' => $order->order_id,
         'payment_method_id' => $draft->payment_method_id,
@@ -540,39 +520,30 @@ class CheckoutPreorderController extends Controller
         'payment_status' => 'Pending'
       ]);
 
-      // Determine payment option from draft data (stored in delivery)
       $paymentOption = $draft->delivery['payment_option'] ?? 'advance';
-
-      // If the draft has a transaction_id, user completed an online payment (redirect-from-COD-to-online)
       $hadOnlinePayment = !empty($draft->transaction_id);
 
       if ($hadOnlinePayment) {
-        // Compute how much was actually charged: if 'full' => full total; else sum advances only
+        // Compute amountPaid based on payment option and cart
         if ($paymentOption === 'full') {
           $amountPaid = (float)$draft->total;
         } else {
-          // sum only the advances for items that have advance_amount
           $amountPaid = 0.0;
           foreach ($draft->cart as $c) {
             $prod = Product::find($c['product_id']);
             $amountPaid += ((float)($prod->advance_amount ?? 0) * (int)$c['quantity']);
           }
-          // if for any reason amountPaid is zero but API transaction exists, fallback to draft total:
-          if ($amountPaid <= 0) {
-            $amountPaid = (float)$draft->total;
-          }
+          if ($amountPaid <= 0) $amountPaid = (float)$draft->total;
         }
 
         $amountDue = max((float)$draft->total - $amountPaid, 0.00);
 
-        // Update PaymentDetail
         $paymentDetail->transaction_id = $draft->transaction_id;
         $paymentDetail->amount_paid = $amountPaid;
         $paymentDetail->payment_status = 'Paid';
         $paymentDetail->paid_at = now();
         $paymentDetail->save();
 
-        // PreOrder status
         if ($amountPaid >= (float)$draft->total) {
           $preorderStatus = 'Paid Full';
           $preorderPaymentOption = 'full';
@@ -595,7 +566,7 @@ class CheckoutPreorderController extends Controller
           'preorder_status' => $preorderStatus,
         ]);
       } else {
-        // True offline COD: nothing paid yet
+        // Pure offline COD
         $amountPaid = 0.00;
         $amountDue = max((float)$draft->total - $amountPaid, 0.00);
 
@@ -614,25 +585,30 @@ class CheckoutPreorderController extends Controller
         ]);
       }
 
-      Log::info('COD order created successfully from draft', ['order_id' => $order->order_id, 'draft_id' => $draft->checkout_draft_id]);
+      Log::info('COD order created from draft', ['method' => __METHOD__, 'order_id' => $order->order_id, 'draft_id' => $draft->checkout_draft_id]);
     });
   }
 
-
+  /**
+   * Process an online draft (payment already completed).
+   */
   public function processOnlineOrderFromDraft(CheckoutDraft $draft)
   {
+    Log::info('processOnlineOrderFromDraft called', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id]);
+
     if ($draft->is_cod) {
       throw new Exception("Attempted to process COD draft #{$draft->checkout_draft_id} as an online order.");
     }
 
     if ($draft->processed_at) {
-      Log::info("Skipping already processed online draft #{$draft->checkout_draft_id}");
+      Log::info('Skipping already processed online draft', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id]);
       return;
     }
 
-    DB::transaction(function () use ($draft) {
-      $businessId = collect($draft->cart)->pluck('business_id')->first();
+    $orderType = $draft->delivery['order_type'] ?? 'delivery';
 
+    DB::transaction(function () use ($draft, $orderType) {
+      $businessId = collect($draft->cart)->pluck('business_id')->first();
       $deliveryTime = $draft->delivery['delivery_time'] ?? now()->format('H:i:s');
 
       $order = Order::create([
@@ -661,27 +637,65 @@ class CheckoutPreorderController extends Controller
         $totalAdvanceRequired += ((float)$product->advance_amount * (int)$item['quantity']);
       }
 
-      DeliveryAddress::create(array_merge($draft->delivery, [
-        'order_id' => $order->order_id,
-        'full_address' => collect($draft->delivery)->except('user_id')->filter()->reverse()->join(', ')
-      ]));
+      // normalize delivery payload and ensure user_id present
+      $delivery = $draft->delivery ?? [];
 
-      // Determine payment option from draft and compute what was actually paid
+      $deliveryPayload = [
+        'order_id'        => $order->order_id,
+        'user_id'         => $draft->user_id ?? null,
+        'full_name'       => $delivery['full_name'] ?? null,
+        'phone_number'    => $delivery['phone_number'] ?? null,
+        // address fields (nullable by default)
+        'region'          => $delivery['region'] ?? null,
+        'province'        => $delivery['province'] ?? null,
+        'city'            => $delivery['city'] ?? null,
+        'barangay'        => $delivery['barangay'] ?? null,
+        'street_name'     => $delivery['street_name'] ?? null,
+        'postal_code'     => $delivery['postal_code'] ?? null,
+        'latitude'        => $delivery['latitude'] ?? null,
+        'longitude'       => $delivery['longitude'] ?? null,
+        'payment_option'  => $delivery['payment_option'] ?? null,
+        'requires_receipt' => $delivery['requires_receipt'] ?? null,
+        'order_type'      => $delivery['order_type'] ?? null,
+        'full_address'    => null,
+      ];
+
+      // If it's a delivery order compute full_address; otherwise explicitly null address fields
+      if (($delivery['order_type'] ?? ($draft->delivery['order_type'] ?? null) ?? 'delivery') === 'delivery') {
+        $deliveryPayload['full_address'] = collect($delivery)
+          ->except('user_id', 'order_type', 'payment_option', 'requires_receipt')
+          ->filter()
+          ->reverse()
+          ->join(', ');
+      } else {
+        // ensure address-specific columns are explicitly null (only phone + user kept)
+        foreach (['region', 'province', 'city', 'barangay', 'street_name', 'postal_code', 'latitude', 'longitude', 'full_address'] as $k) {
+          $deliveryPayload[$k] = null;
+        }
+      }
+
+      // finally create
+      DeliveryAddress::create($deliveryPayload);
+
+      Log::debug('DeliveryAddress inserted', [
+        'method' => __METHOD__,
+        'order_id' => $order->order_id,
+        'user_id' => $deliveryPayload['user_id'],
+        'order_type' => $deliveryPayload['order_type'] ?? 'delivery',
+      ]);
+
+
       $paymentOption = $draft->delivery['payment_option'] ?? $draft->payment_option ?? 'advance';
 
       if ($paymentOption === 'full') {
         $amountPaid = (float)$draft->total;
       } else {
-        // sum only advances present in the cart
         $amountPaid = 0.0;
         foreach ($draft->cart as $c) {
           $product = Product::find($c['product_id']);
           $amountPaid += ((float)($product->advance_amount ?? 0) * (int)$c['quantity']);
         }
-        // fallback: if amountPaid is zero (no advances) treat as full paid (safe fallback)
-        if ($amountPaid <= 0) {
-          $amountPaid = (float)$draft->total;
-        }
+        if ($amountPaid <= 0) $amountPaid = (float)$draft->total;
       }
 
       $amountDue = max($draft->total - $amountPaid, 0);
@@ -720,17 +734,23 @@ class CheckoutPreorderController extends Controller
       }
 
       $draft->update(['processed_at' => now()]);
-
-      Log::info("Order #{$order->order_id} created successfully from online draft #{$draft->checkout_draft_id}");
+      Log::info('Online order created from draft', ['method' => __METHOD__, 'order_id' => $order->order_id, 'draft_id' => $draft->checkout_draft_id]);
     });
   }
 
+  /**
+   * Try to process any remaining COD drafts stored in the user's session flow.
+   */
   public function processRemainingDrafts($userId)
   {
+    Log::debug('processRemainingDrafts called', ['method' => __METHOD__, 'user_id' => $userId]);
+
     $draftIdsInFlow = session('checkout_flow_draft_ids', []);
     if (empty($draftIdsInFlow)) {
+      Log::debug('No draft IDs in session flow', ['method' => __METHOD__]);
       return;
     }
+
     $unprocessedDrafts = CheckoutDraft::whereIn('checkout_draft_id', $draftIdsInFlow)
       ->where('user_id', $userId)->whereNull('processed_at')->get();
 
@@ -741,18 +761,28 @@ class CheckoutPreorderController extends Controller
           $draft->update(['processed_at' => now()]);
         }
       } catch (Exception $e) {
-        Log::error('Failed to process a remaining preorder COD draft', ['draft_id' => $draft->checkout_draft_id, 'error' => $e->getMessage()]);
+        Log::error('Failed to process a remaining preorder COD draft', [
+          'method' => __METHOD__,
+          'draft_id' => $draft->checkout_draft_id,
+          'error' => $e->getMessage()
+        ]);
         continue;
       }
     }
   }
 
+  /**
+   * Return current checkout flow status for online drafts.
+   */
   public function status()
   {
+    Log::debug('status called', ['method' => __METHOD__]);
+
     $draftIdsInFlow = session('checkout_flow_draft_ids', []);
     if (empty($draftIdsInFlow)) {
       return response()->json(['status' => 'error', 'message' => 'No active preorder checkout flow found.'], 404);
     }
+
     $drafts = CheckoutDraft::whereIn('checkout_draft_id', $draftIdsInFlow)->get();
     $onlineDrafts = $drafts->where('is_cod', false);
     $cancelledDraftIds = session('flow_cancelled_drafts', []);
@@ -765,7 +795,7 @@ class CheckoutPreorderController extends Controller
       if ($draft->processed_at) {
         $status = 'paid';
         $processedCount++;
-      } else if (in_array($draft->checkout_draft_id, $cancelledDraftIds)) {
+      } elseif (in_array($draft->checkout_draft_id, $cancelledDraftIds)) {
         $status = 'cancelled';
         $cancelledCount++;
       } else {
@@ -775,6 +805,8 @@ class CheckoutPreorderController extends Controller
     })->values();
 
     $flowStatus = $pendingCount === 0 ? 'complete' : 'pending';
+    Log::debug('status response prepared', ['method' => __METHOD__, 'processed' => $processedCount, 'pending' => $pendingCount]);
+
     return response()->json([
       'total_online' => $onlineDrafts->count(),
       'processed' => $processedCount,
@@ -785,12 +817,173 @@ class CheckoutPreorderController extends Controller
     ]);
   }
 
+  /**
+   * Return unavailable (fully booked) dates for a business preorders.
+   */
+  public function getAvailability(BusinessDetail $business)
+  {
+    Log::debug('getAvailability called', ['method' => __METHOD__, 'business_id' => $business->business_id]);
+
+    $fullyBookedDates = PreorderSchedule::where('business_id', $business->business_id)
+      ->where('is_active', true)
+      ->whereRaw('current_order_count >= max_orders')
+      ->pluck('available_date')
+      ->map(fn($date) => $date->format('Y-m-d'))
+      ->toArray();
+
+    return response()->json(['unavailable_dates' => $fullyBookedDates]);
+  }
+
+  /**
+   * Render upload receipt page for a given order (if preorder awaiting receipt).
+   */
+  public function uploadReceipt($order_id)
+  {
+    Log::info('uploadReceipt called', ['method' => __METHOD__, 'user_id' => Auth::id(), 'order_id' => $order_id]);
+
+    $pendingDbPreorder = PreOrder::whereHas('order', function ($q) use ($order_id) {
+      $q->where('user_id', Auth::id())->where('order_id', $order_id);
+    })
+      ->whereNull('receipt_url')
+      ->with('order.items.product')
+      ->latest('created_at')
+      ->first();
+
+    if (! $pendingDbPreorder) {
+      Log::warning('No pending preorder requiring receipt found', ['method' => __METHOD__, 'order_id' => $order_id]);
+      return redirect()->route('customer.preorder')->with('error', 'No pending pre-order found that requires receipt upload.');
+    }
+
+    $order = $pendingDbPreorder->order;
+    $total = 0;
+    if ($order && $order->items) {
+      foreach ($order->items as $item) {
+        $price = null;
+        if (isset($item->price) && $item->price !== null) {
+          $price = (float)$item->price;
+        } elseif (isset($item->product) && isset($item->product->price)) {
+          $price = (float)$item->product->price;
+        } else {
+          $price = 0;
+        }
+        $qty = isset($item->quantity) ? (int)$item->quantity : 1;
+        $total += $price * $qty;
+      }
+    }
+
+    Log::debug('Rendering upload receipt view', ['method' => __METHOD__, 'order_id' => $order_id, 'total' => $total]);
+
+    return view('content.customer.customer-upload-receipt', [
+      'order'       => $order,
+      'preorder'    => $pendingDbPreorder,
+      'total'       => $total,
+      'order_id'    => $order_id,
+    ]);
+  }
+
+  /**
+   * Confirm preorder by uploading a receipt image.
+   */
+  public function confirmPreorder(Request $request, $order)
+  {
+    Log::info('confirmPreorder called', ['method' => __METHOD__, 'user_id' => Auth::id(), 'order_id' => $order]);
+
+    $order = Order::where('order_id', $order)->firstOrFail();
+    $user = Auth::user();
+    if ($order->user_id != $user->user_id) {
+      Log::warning('Unauthorized confirmPreorder attempt', ['method' => __METHOD__, 'order_id' => $order->order_id, 'user_id' => $user->user_id]);
+      abort(403, 'Unauthorized action.');
+    }
+
+    $preorder = PreOrder::where('order_id', $order->order_id)->firstOrFail();
+
+    $request->validate(['receipt' => 'required|image|mimes:jpeg,png,jpg|max:2048']);
+
+    if (! $request->hasFile('receipt')) {
+      Log::warning('confirmPreorder missing receipt file', ['method' => __METHOD__, 'order_id' => $order->order_id]);
+      return back()->withErrors(['receipt' => 'Please upload a valid receipt image.']);
+    }
+
+    $file = $request->file('receipt');
+    $disk = Storage::disk('s3');
+    $imagePath = $file->store('products', 's3');
+
+    if (!$imagePath) {
+      Log::error('Failed to store receipt on S3', ['method' => __METHOD__, 'order_id' => $order->order_id]);
+      throw new Exception('Failed to store image on S3. Check AWS permissions or bucket policy.');
+    }
+
+    /**
+     * @var \Illuminate\Filesystem\FilesystemAdapter $disk
+     */
+    $finalUrl = $disk->url($imagePath);
+
+    $preorder->receipt_url = $finalUrl;
+    $preorder->preorder_status = 'Receipt Uploaded';
+    $preorder->save();
+
+    $paymentDetail = PaymentDetail::where('order_id', $order->order_id)->first();
+    if ($paymentDetail) {
+      if ((float)($paymentDetail->amount_paid ?? 0) > 0) {
+        $paymentDetail->payment_status = 'Paid';
+        $paymentDetail->paid_at = $paymentDetail->paid_at ?? now();
+        $paymentDetail->save();
+      } else {
+        if ((float)($preorder->advance_paid_amount ?? 0) > 0) {
+          $paymentDetail->amount_paid = $preorder->advance_paid_amount;
+          $paymentDetail->payment_status = 'Paid';
+          $paymentDetail->paid_at = $paymentDetail->paid_at ?? now();
+          $paymentDetail->save();
+        }
+      }
+    }
+
+    if (!empty($preorder->payment_transaction_id)) {
+      $draft = CheckoutDraft::where('transaction_id', $preorder->payment_transaction_id)
+        ->where('user_id', $user->user_id)
+        ->first();
+
+      if ($draft) {
+        $draft->update(['processed_at' => now()]);
+        $this->removeProcessedItemsFromPreorder(collect([$draft]));
+        Log::info('Marked draft processed after receipt upload', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id]);
+      }
+    }
+
+    // Remove session items by product ids from the order (fallback)
+    $productIds = OrderItem::where('order_id', $order->order_id)->pluck('product_id')->all();
+    if (!empty($productIds)) {
+      $currentPreorders = collect(session('preorder', []));
+      $finalPreorders = $currentPreorders->reject(function ($item) use ($productIds) {
+        return in_array($item['product_id'] ?? null, $productIds);
+      })->values()->all();
+      session(['preorder' => $finalPreorders]);
+
+      Log::info('Removed confirmed preorder items from session after receipt upload', [
+        'method' => __METHOD__,
+        'user_id' => $user->user_id,
+        'order_id' => $order->order_id,
+        'removed_product_ids' => $productIds
+      ]);
+    }
+
+    return redirect()->route('customer.orders.index')
+      ->with('success', 'Receipt uploaded! Your preorder is now pending vendor verification.')
+      ->header('Cache-Control', 'no-cache, no-store, must-revalidate') // HTTP 1.1.
+      ->header('Pragma', 'no-cache') // HTTP 1.0.
+      ->header('Expires', '0');
+  }
+
+  /**
+   * Resolve gateway type for PayMongo based on method name or configured gateway_type.
+   */
   private function getPayMongoGatewayType($methodName, $paymentMethod)
   {
     $valid = ['card', 'gcash', 'paymaya'];
     if ($paymentMethod->gateway_type && in_array($paymentMethod->gateway_type, $valid)) {
       return $paymentMethod->gateway_type;
     }
+
     return match (strtolower($methodName)) {
       'gcash' => 'gcash',
       'maya', 'paymaya' => 'paymaya',
@@ -798,20 +991,27 @@ class CheckoutPreorderController extends Controller
     };
   }
 
-  // Public so it can be called from PaymentController
+  /**
+   * Remove processed draft items from session preorder list.
+   * Public so PaymentController can call it.
+   */
   public function removeProcessedItemsFromPreorder($processedDrafts, $force = false)
   {
+    Log::debug('removeProcessedItemsFromPreorder called', ['method' => __METHOD__, 'force' => $force]);
+
     if (empty($processedDrafts)) return;
 
     $processedProductIds = [];
 
     foreach ($processedDrafts as $draft) {
-      // If not forcing removal AND the draft requires a receipt, skip it.
       $requiresReceipt = data_get($draft, 'delivery.requires_receipt', false);
+      $processedAt = data_get($draft, 'processed_at', null);
 
-      if (!$force && $requiresReceipt) {
+      // If draft is processed — remove its items even if requires_receipt was true.
+      if (! $force && $requiresReceipt && empty($processedAt)) {
         Log::info('Skipping session removal for draft awaiting receipt upload', [
-          'draft_id' => $draft->checkout_draft_id,
+          'method' => __METHOD__,
+          'draft_id' => $draft->checkout_draft_id ?? null,
           'requires_receipt' => $requiresReceipt,
           'transaction_id' => $draft->transaction_id ?? null,
         ]);
@@ -824,7 +1024,11 @@ class CheckoutPreorderController extends Controller
       );
     }
 
-    if (empty($processedProductIds)) return;
+
+    if (empty($processedProductIds)) {
+      Log::debug('No processed product ids to remove from session', ['method' => __METHOD__]);
+      return;
+    }
 
     $currentPreorders = collect(session('preorder', []));
     $finalPreorders = $currentPreorders
@@ -834,171 +1038,6 @@ class CheckoutPreorderController extends Controller
 
     session(['preorder' => $finalPreorders]);
 
-    Log::info('Cleaned items from session preorder list.', ['removed_product_ids' => $processedProductIds]);
-  }
-
-
-  public function getAvailability(BusinessDetail $business)
-  {
-    $fullyBookedDates = PreorderSchedule::where('business_id', $business->business_id)
-      ->where('is_active', true)
-      ->whereRaw('current_order_count >= max_orders')
-      ->pluck('available_date')
-      ->map(fn($date) => $date->format('Y-m-d')) // Format for Flatpickr
-      ->toArray();
-
-    return response()->json([
-      'unavailable_dates' => $fullyBookedDates
-    ]);
-  }
-
-  public function uploadReceipt($order_id)
-  {
-    // Find latest PreOrder for this user/business that still needs a receipt
-    $pendingDbPreorder = PreOrder::whereHas('order', function ($q) use ($order_id) {
-      $q->where('user_id', Auth::id())
-        ->where('order_id', $order_id);
-    })
-      ->whereNull('receipt_url')
-      ->with('order.items.product') // eager load items and product (if relation exists)
-      ->latest('created_at')
-      ->first();
-
-    if (! $pendingDbPreorder) {
-      // No pending preorder that requires receipt upload
-      return redirect()->route('customer.preorder')
-        ->with('error', 'No pending pre-order found that requires receipt upload.');
-    }
-
-    $order = $pendingDbPreorder->order;
-
-    // Compute order total defensively (use stored item price if available, else product price)
-    $total = 0;
-    if ($order && $order->items) {
-      foreach ($order->items as $item) {
-        // Try to read price from the order item first (if you store it there),
-        // otherwise fall back to the related product price.
-        $price = null;
-        if (isset($item->price) && $item->price !== null) {
-          $price = (float) $item->price;
-        } elseif (isset($item->product) && isset($item->product->price)) {
-          $price = (float) $item->product->price;
-        } else {
-          $price = 0;
-        }
-
-        $qty = isset($item->quantity) ? (int) $item->quantity : 1;
-        $total += $price * $qty;
-      }
-    }
-
-    // Pass variables the blade expects:
-    return view('content.customer.customer-upload-receipt', [
-      'order'       => $order,
-      'preorder'    => $pendingDbPreorder,
-      'total'       => $total,
-      'order_id' => $order_id,
-    ]);
-  }
-
-  /**
-   * Upload receipt to confirm a preorder (after payment).
-   */
-  public function confirmPreorder(Request $request, $order)
-  {
-    // Find order and authorize
-    $order = Order::where('order_id', $order)->firstOrFail();
-    $user = Auth::user();
-    if ($order->user_id != $user->user_id) {
-      abort(403, 'Unauthorized action.');
-    }
-
-    // Find preorder record
-    $preorder = PreOrder::where('order_id', $order->order_id)->firstOrFail();
-
-    // Validate receipt
-    $request->validate([
-      'receipt' => 'required|image|mimes:jpeg,png,jpg|max:2048', // 2MB
-    ]);
-
-    if (! $request->hasFile('receipt')) {
-      return back()->withErrors(['receipt' => 'Please upload a valid receipt image.']);
-    }
-
-    // Store receipt on S3 (keeps same behaviour as earlier code)
-    $file = $request->file('receipt');
-    $disk = Storage::disk('s3');
-    $imagePath = $file->store('products', 's3');
-
-    if (!$imagePath) {
-      throw new \Exception('Failed to store image on S3. Check AWS permissions or bucket policy.');
-    }
-    /**
-     * @var \Illuminate\Filesystem\FilesystemAdapter $disk
-     */
-
-    $finalUrl = $disk->url($imagePath);
-
-    // Save full URL to DB
-    $preorder->receipt_url = $finalUrl;
-    $preorder->preorder_status = 'Receipt Uploaded';
-    $preorder->save();
-
-    // Update PaymentDetail if present: mark Paid/paid_at when appropriate
-    $paymentDetail = PaymentDetail::where('order_id', $order->order_id)->first();
-    if ($paymentDetail) {
-      // If already has amount_paid > 0, ensure status is Paid and paid_at set
-      if ((float)($paymentDetail->amount_paid ?? 0) > 0) {
-        $paymentDetail->payment_status = 'Paid';
-        $paymentDetail->paid_at = $paymentDetail->paid_at ?? now();
-        $paymentDetail->save();
-      } else {
-        // If payment detail has 0 but preorder records an advance_paid_amount (user provided proof),
-        // update amount_paid from preorder and mark Paid.
-        if ((float)($preorder->advance_paid_amount ?? 0) > 0) {
-          $paymentDetail->amount_paid = $preorder->advance_paid_amount;
-          $paymentDetail->payment_status = 'Paid';
-          $paymentDetail->paid_at = $paymentDetail->paid_at ?? now();
-          $paymentDetail->save();
-        }
-      }
-    }
-
-    // If there's a CheckoutDraft associated with the payment transaction, mark it processed and remove session items
-    if (!empty($preorder->payment_transaction_id)) {
-      $draft = CheckoutDraft::where('transaction_id', $preorder->payment_transaction_id)
-        ->where('user_id', $user->user_id)
-        ->first();
-
-      if ($draft) {
-        // mark as processed and remove items from session using your helper
-        $draft->update(['processed_at' => now()]);
-        $this->removeProcessedItemsFromPreorder(collect([$draft]));
-      } else {
-        // No draft found: fall back to removing based on order items below
-      }
-    }
-
-    // If we didn't remove items above via the draft, remove session items by product IDs from the order
-    // (covers edge cases where transaction_id/draft is not available)
-    $productIds = OrderItem::where('order_id', $order->order_id)->pluck('product_id')->all();
-    if (!empty($productIds)) {
-      $currentPreorders = collect(session('preorder', []));
-      $finalPreorders = $currentPreorders
-        ->reject(function ($item) use ($productIds) {
-          return in_array($item['product_id'] ?? null, $productIds);
-        })
-        ->values()
-        ->all();
-      session(['preorder' => $finalPreorders]);
-
-      Log::info('Removed confirmed preorder items from session after receipt upload', [
-        'user_id' => $user->user_id,
-        'order_id' => $order->order_id,
-        'removed_product_ids' => $productIds,
-      ]);
-    }
-
-    return redirect()->route('customer.orders.index')->with('success', 'Receipt uploaded! Your preorder is now pending vendor verification.');
+    Log::info('Cleaned items from session preorder list', ['method' => __METHOD__, 'removed_product_ids' => $processedProductIds]);
   }
 }

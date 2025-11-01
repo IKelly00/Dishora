@@ -77,15 +77,6 @@
                         @endphp
 
                         @php
-                            // Determine business object (if available) from first item
-                            $first = $items->first();
-                            $business = $first && $first->product ? $first->product->business ?? null : null;
-                            $businessTotal = 0;
-                        @endphp
-
-                        {{-- ... inside @foreach ($grouped as $businessId => $items) ... --}}
-
-                        @php
                             $isBusinessOpen = false;
                             $tooltipMessage = 'This business is currently closed.';
 
@@ -97,41 +88,31 @@
                             ) {
                                 $hoursToday = $openingHours->get($businessId)?->firstWhere('day_of_week', $currentDay);
 
-                                // --- START: This is the FIX ---
-                                // Changed !$hoursToday->is_closed to (bool)$hoursToday->is_closed === false
-                                // This is safer for checking values like "0", 0, or false.
                                 if (
                                     $hoursToday &&
                                     (bool) $hoursToday->is_closed === false &&
                                     $hoursToday->opens_at &&
                                     $hoursToday->closes_at
                                 ) {
-                                    // --- END: This is the FIX ---
+                                    $opens_at = substr($hoursToday->opens_at, 0, 8);
+                                    $closes_at = substr($hoursToday->closes_at, 0, 8);
 
-                                    // Also, let's trim the time values just to be safe, like in your checkout controller
-        $opens_at = substr($hoursToday->opens_at, 0, 8);
-        $closes_at = substr($hoursToday->closes_at, 0, 8);
-
-        if ($currentTime >= $opens_at && $currentTime <= $closes_at) {
-            $isBusinessOpen = true;
-        } elseif ($currentTime < $opens_at) {
-            $tooltipMessage = 'This business has not opened yet.';
-        } else {
-            $tooltipMessage = 'This business is already closed for the day.';
+                                    if ($currentTime >= $opens_at && $currentTime <= $closes_at) {
+                                        $isBusinessOpen = true;
+                                    } elseif ($currentTime < $opens_at) {
+                                        $tooltipMessage = 'This business has not opened yet.';
+                                    } else {
+                                        $tooltipMessage = 'This business is already closed for the day.';
                                     }
                                 }
                             }
                         @endphp
 
-
                         <div class="col-12">
                             <div class="card shadow-sm border-0 rounded-4 order-card">
-                                {{-- ... (rest of your card) ... --}}
-
 
                                 <div class="col-12">
                                     <div class="card shadow-sm border-0 rounded-4 order-card">
-                                        {{-- ... (rest of your card header and table) ... --}}
 
                                         <div class="col-12">
                                             <div class="card shadow-sm border-0 rounded-4 order-card">
@@ -260,32 +241,31 @@
                                                             ₱{{ number_format($businessTotal, 2) }}</h5>
                                                     </div>
 
-                                                    {{-- --- START: Modified Button Logic --- --}}
                                                     @if ($isBusinessOpen)
                                                         <a href="{{ route('checkout.proceed', ['business_id' => $businessId]) }}"
                                                             class="btn btn-primary ms-4">
                                                             Proceed to Checkout
                                                         </a>
                                                     @else
-                                                        {{-- This span wrapper is needed for Bootstrap tooltips on disabled elements --}}
                                                         <span class="d-inline-block ms-4" tabindex="0"
                                                             data-bs-toggle="tooltip" data-bs-placement="top"
                                                             title="{{ $tooltipMessage }}">
                                                             <a href="#" class="btn btn-primary disabled"
-                                                                style="pointer-events: none;" {{-- Prevents clicks on the disabled link --}}
-                                                                aria-disabled="true" onclick="return false;">
+                                                                style="pointer-events: none;" aria-disabled="true"
+                                                                onclick="return false;">
                                                                 Proceed to Checkout
                                                             </a>
                                                         </span>
                                                     @endif
-                                                    {{-- --- END: Modified Button Logic --- --}}
-
                                                 </div>
-
-                                                {{-- ... (rest of the file) ... --}}
 
                                             </div>
                                         </div>
+
+                                    </div> {{-- close .card (middle) --}}
+                                </div> {{-- close .col-12 (middle) --}}
+                            </div> {{-- close .card (outer) --}}
+                        </div> {{-- close .col-12 (outer) --}}
                     @endforeach
                 </div>
             @endif
@@ -374,10 +354,9 @@
         }
     </style>
 
-    {{-- JAVASCRIPT: cart update + totals per business (keeps same UX as preorder but hits cart routes) --}}
+    {{-- JAVASCRIPT: cart update + totals per business --}}
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl);
@@ -422,7 +401,6 @@
                 }).catch(err => console.error('Update failed:', err));
             };
 
-            // Wire up increase/decrease buttons globally
             document.querySelectorAll('.increase').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const id = btn.dataset.id;
@@ -453,7 +431,6 @@
                 });
             });
 
-            // Initialize totals for each business card
             document.querySelectorAll('.card.order-card').forEach(card => updateBusinessCardTotals(card));
         });
     </script>

@@ -6,8 +6,6 @@
     {{-- CSS Includes --}}
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.2.0/fonts/remixicon.css" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="https://unpkg.com/@geoapify/geocoder-autocomplete@^1/styles/minimal.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
 
     {{-- JS Includes (Loaded early for availability) --}}
     <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
@@ -334,8 +332,7 @@
                                 <div class="border border-dashed rounded mb-2 bg-light d-flex flex-column justify-content-center align-items-center drop-zone @error('business_image') is-invalid @enderror"
                                     style="cursor:pointer; height: 200px;" data-input-id="business_image_input"
                                     data-display-id="business_image_file_name">
-                                    <input type="file" name="business_image" class="d-none"
-                                        id="business_image_input">
+                                    <input type="file" name="business_image" class="d-none" id="business_image_input">
 
                                     {{-- Add style here to hide placeholder if image exists --}}
                                     <div id="business_upload_placeholder" class="text-center"
@@ -470,9 +467,8 @@
                             <div class="col-md-9 mb-3">
                                 <label class="form-label">Street Name, Building, House No.</label>
                                 <input type="text" class="form-control @error('street') is-invalid @enderror"
-                                    name="street" id="street_name"
-                                    value="{{ old('street', $address['street'] ?? '') }}" required>
-                                @error('street')
+                                    name="street" id="street_name" value="{{ old('street', $business->street ?? '') }}"
+                                    required> @error('street')
                                     <div class="error-message">{{ $message }}</div>
                                 @enderror
                             </div>
@@ -480,7 +476,7 @@
                                 <label class="form-label">Postal Code</label>
                                 <input type="text" class="form-control @error('postal_code') is-invalid @enderror"
                                     name="postal_code" id="postal_code" readonly placeholder="Auto-populated"
-                                    value="{{ old('postal_code') }}" required>
+                                    value="{{ old('postal_code', $business->postal_code ?? '') }}" required>
                                 @error('postal_code')
                                     <div class="error-message">{{ $message }}</div>
                                 @enderror
@@ -625,7 +621,7 @@
                                         $accName = old('account_name.' . $pmid, '');
                                         $isCod =
                                             $method &&
-                                            (str_contains(strtolower($method->method_name), 'cash on delivery') ||
+                                            (str_contains(strtolower($method->method_name), 'cash') ||
                                                 str_contains(strtolower($method->method_name), 'cod'));
                                     @endphp
                                     @if ($method && !$isCod)
@@ -1003,8 +999,14 @@
         (function() {
             document.addEventListener('DOMContentLoaded', function() {
 
-                const loadedAddress = @json($address);
-
+                const loadedAddress = {!! json_encode([
+                    'street' => $business->street,
+                    'barangay' => $business->barangay,
+                    'city' => $business->city,
+                    'province' => $business->province,
+                    'region' => $business->region,
+                    'postal_code' => $business->postal_code,
+                ]) !!};
 
                 const safeQuery = (id) => document.getElementById(id);
                 const qs = (sel) => document.querySelector(sel);
@@ -1446,7 +1448,7 @@
                     // Validate account details for non-COD methods
                     selected.forEach(mid => {
                         const methodName = (paymentMethodMap[mid] || '').toLowerCase();
-                        const isCod = methodName.includes('cash on delivery') || methodName.includes(
+                        const isCod = methodName.includes('cash') || methodName.includes(
                             'cod');
                         if (isCod) return;
                         const accNumInput = qs(`input[name="account_number[${mid}]"]`);
@@ -1594,7 +1596,7 @@
                     if (!container) return;
                     if (container.querySelector(`[data-method-id="${id}"]`)) return;
                     const lower = name.toLowerCase();
-                    if (lower.includes('cash on delivery') || lower.includes('cod')) return;
+                    if (lower.includes('cash') || lower.includes('cod')) return;
                     const div = document.createElement('div');
                     div.className = 'payment-detail-row';
                     div.setAttribute('data-method-id', id);

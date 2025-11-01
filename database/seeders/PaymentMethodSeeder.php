@@ -21,8 +21,8 @@ class PaymentMethodSeeder extends Seeder
         'status'      => 'active',
       ],
       [
-        'method_name' => 'Cash on Delivery',
-        'description' => 'Pay with cash upon delivery',
+        'method_name' => 'Cash',
+        'description' => 'Pay with cash upon delivery/ pickup',
         'status'      => 'active',
       ],
       [

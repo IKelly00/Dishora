@@ -8,10 +8,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, DB, Storage, Validator, Log, Session};
 use App\Models\BusinessDetail;
 use App\Models\BusinessOpeningHour;
-use App\Models\BusinessPaymentMethod; // --- NEW --- Import pivot model
-use App\Models\BusinessPmDetail;      // --- NEW --- Import details model
+use App\Models\BusinessPaymentMethod;
+use App\Models\BusinessPmDetail;
 use App\Models\PaymentMethod;
 use App\Models\Vendor;
+use Illuminate\Support\Str;
 
 class VendorBusinessDetail extends Controller
 {
@@ -156,22 +157,22 @@ class VendorBusinessDetail extends Controller
       'city'        => '',
       'province'    => '',
       'postal_code' => '',
-      'region'      => 'REGION V (BICOL REGION)' // Default as requested
+      'region'      => ''
     ];
 
-    if ($business->business_location) {
-      // Assumes format: Street, Barangay, City, Province, Postal Code
+    if ($business->business_location && !$business->street) {
+      // User's format: Street, Barangay, City, Province, Region, Postal Code
       $parts = array_map('trim', explode(',', $business->business_location));
 
-      if (count($parts) === 5) {
-        $address['street']      = $parts[0];
-        $address['barangay']    = $parts[1];
-        $address['city']        = $parts[2];
-        $address['province']    = $parts[3];
-        $address['postal_code'] = $parts[4];
-      } else {
-        // Fallback if the format is different
-        $address['street'] = $business->business_location;
+      if (count($parts) === 6) {
+        // Manually set the properties on the $business object
+        // This will make them available in the Blade file.
+        $business->street      = $parts[0];
+        $business->barangay    = $parts[1];
+        $business->city        = $parts[2];
+        $business->province    = $parts[3];
+        $business->region      = $parts[4];
+        $business->postal_code = $parts[5];
       }
     }
     // --- END NEW ---
@@ -310,23 +311,38 @@ class VendorBusinessDetail extends Controller
 
     DB::beginTransaction();
     try {
-      $storeFile = function ($file, $folder = 'business_files') {
-        return $file->store($folder, 'public');
-      };
+      $disk = Storage::disk('s3');
 
+      // Map form 'name' to the database_column
       $fileFields = [
-        'business_image'       => 'business_images',
-        'valid_id_file'        => 'business_valid_ids',
-        'business_permit_file' => 'business_permits',
-        'bir_reg_file'         => 'business_bir_files',
-        'mayor_permit_file'    => 'business_mayor_permits'
+        'business_image'    => 'business_image',
+        'valid_id'          => 'valid_id_file',
+        'business_permit'   => 'business_permit_file',
+        'bir_registration'  => 'bir_reg_file',
+        'mayors_permit'     => 'mayor_permit_file'
       ];
-      foreach ($fileFields as $field => $folder) {
-        if ($request->hasFile($field)) {
-          if ($business->{$field}) {
-            Storage::disk('public')->delete($business->{$field});
+
+      foreach ($fileFields as $formName => $dbColumn) {
+        if ($request->hasFile($formName)) {
+
+          // 1. Delete the old file from S3 (Simplified)
+          $oldFileUrl = $business->{$dbColumn};
+          if ($oldFileUrl) {
+            // Get the last part of the URL (the filename)
+            $oldFileName = Str::afterLast($oldFileUrl, '/');
+            if ($oldFileName) {
+              $disk->delete($oldFileName);
+            }
           }
-          $business->{$field} = $storeFile($request->file($field), $folder);
+
+          // 2. Store the new file and get its path (hash name)
+          $path = $request->file($formName)->store('', 's3');
+
+          /**
+           * @var \Illuminate\Filesystem\FilesystemAdapter $disk
+           */
+          // 3. Save the new *full URL* to the database
+          $business->{$dbColumn} = $disk->url($path);
         }
       }
 
@@ -336,6 +352,7 @@ class VendorBusinessDetail extends Controller
         $request->input('barangay'),
         $request->input('city'),
         $request->input('province'),
+        $request->input('region'),
         $request->input('postal_code')
       ]);
       // --- END NEW ---
@@ -410,7 +427,7 @@ class VendorBusinessDetail extends Controller
       // 5. Loop and update or create
       foreach ($postedMethodIds as $pmId) {
         $methodName = $allPaymentMethods->get($pmId, '');
-        $isCod = str_contains(strtolower($methodName), 'cash on delivery') || str_contains(strtolower($methodName), 'cod');
+        $isCod = str_contains(strtolower($methodName), 'cash') || str_contains(strtolower($methodName), 'cod');
 
         // Step 5a: Find or create the PIVOT record
         $businessPaymentMethod = BusinessPaymentMethod::firstOrCreate(
@@ -452,8 +469,13 @@ class VendorBusinessDetail extends Controller
       // Make sure this route name is correct in your web.php
       // It might be 'customer.start.selling.edit'
       // I am using the one from your previous 'update' method: 'vendor.business.edit'
+      // In your update() method in the controller
+
       return redirect()->route('vendor.business.edit', $redirectId)
-        ->with('success', 'Business details updated successfully.');
+        ->with('success', 'Business details updated successfully.')
+        ->header('Cache-Control', 'no-cache, no-store, must-revalidate') // HTTP 1.1.
+        ->header('Pragma', 'no-cache') // HTTP 1.0.
+        ->header('Expires', '0'); // Proxies.
     } catch (\Throwable $e) {
       DB::rollBack();
       Log::error('Business update failed: ' . ($e->getMessage() ?? 'Unknown error'), [

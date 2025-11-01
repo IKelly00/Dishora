@@ -26,66 +26,89 @@ use App\Models\{
 class CheckoutCartController extends Controller
 {
   /**
+   * IMPORTANT: This controller orchestrates the cart checkout flow for a single-business
+   * checkout. It performs the following responsibilities:
+   *  - Reads and validates cart data from the session
+   *  - Normalizes items using authoritative DB prices (prevents stale session prices)
+   *  - Creates CheckoutDraft records (one per business) to represent in-progress flows
+   *  - Starts PayMongo checkout sessions for online payment methods and stores
+   *    the payment intent id (transaction_id) on the draft for later refund/verification
+   *  - Immediately processes COD drafts by creating Order / OrderItem / DeliveryAddress
+   *    / PaymentDetail records inside DB transactions
+   *
+   * SECURITY / SAFETY NOTES:
+   *  - This controller assumes the session 'cart' contains only product IDs and quantities.
+   *  - Prices are always taken from the database when creating drafts/orders.
+   *  - All critical DB writes are wrapped in transactions and logged for easier debugging.
+   */
+  /**
    * Show checkout page for cart (single business) — now includes opening hours for JS.
+   */
+  /**
+   * Render checkout view for a specific business.
+   * Important notes:
+   *  - Reads cart from session('cart') and filters items for the given businessId.
+   *  - Uses DB product records (fresh price and availability) for display and calculations.
+   *  - Computes aggregated 'cutoffMinutes' used by client-side scheduling code.
+   *  - Logs entry, warnings if cart is empty, and returns the checkout view which must
+   *    present the opening hours and available payment methods to the user.
    */
   public function proceed($businessId)
   {
-    // Get full cart from session
+    Log::info('Entered proceed()', ['method' => __METHOD__, 'user_id' => Auth::id(), 'business_id' => $businessId]);
+
     $allCart = collect(session('cart', []));
 
     if ($allCart->isEmpty()) {
+      Log::warning('Cart is empty in proceed()', ['method' => __METHOD__, 'user_id' => Auth::id()]);
       return redirect()->route('customer.cart')->withErrors(['error' => 'Your cart is empty.']);
     }
 
-    // Load products for all items in cart
     $productIds = $allCart->pluck('product_id')->unique()->values();
     $products = Product::with('business')->whereIn('product_id', $productIds)->get()->keyBy('product_id');
 
-    // Filter items that belong to the requested business
     $itemsForBusiness = $allCart->filter(function ($item) use ($businessId, $products) {
       return isset($products[$item['product_id']]) && ($products[$item['product_id']]->business_id == $businessId);
     })->map(function ($item) use ($products) {
       $p = $products[$item['product_id']] ?? null;
-      // Always use the current DB price for checkout display (avoid stale session price)
       $item['price'] = (float) ($p?->price ?? 0);
       $item['is_unavailable'] = !$p || !($p->is_available ?? true);
       return $item;
     })->values();
 
     if ($itemsForBusiness->isEmpty()) {
+      Log::warning('No checkoutable items for vendor in proceed()', ['method' => __METHOD__, 'business_id' => $businessId, 'user_id' => Auth::id()]);
       return redirect()->route('customer.cart')->withErrors(['error' => 'No checkoutable items found for this vendor.']);
     }
 
-    // Keep only available items
     $checkoutCart = $itemsForBusiness->filter(fn($i) => empty($i['is_unavailable']))->values();
     if ($checkoutCart->isEmpty()) {
+      Log::warning('All items unavailable for vendor in proceed()', ['method' => __METHOD__, 'business_id' => $businessId]);
       return redirect()->route('customer.cart')->withErrors(['error' => 'All items for this vendor are unavailable.']);
     }
 
-    // compute total for this business
     $total = $checkoutCart->sum(fn($item) => (float)$item['price'] * (int)$item['quantity']);
 
-    // load vendor/payment methods
     $vendors = BusinessDetail::with(['paymentMethods' => fn($q) => $q->where('status', 'active')])
       ->where('business_id', $businessId)->get()->keyBy('business_id');
+
+    $vendor = $vendors->get($businessId);
 
     $user = Auth::user();
     $customer = Customer::where('user_id', $user->user_id)->first();
 
-    // --- NEW: load opening hours for this business and transform for JS ----
     $opening = \App\Models\BusinessOpeningHour::where('business_id', $businessId)->get();
 
     $openingHours = [];
     foreach ($opening as $row) {
-      $key = strtolower($row->day_of_week); // monday, tuesday, ...
+      $key = strtolower($row->day_of_week);
       $openingHours[$key] = [
-        'opens_at'  => $row->opens_at ? substr($row->opens_at, 0, 8) : null,   // "08:00:00"
-        'closes_at' => $row->closes_at ? substr($row->closes_at, 0, 8) : null,  // "20:00:00"
+        'opens_at'  => $row->opens_at ? substr($row->opens_at, 0, 8) : null,
+        'closes_at' => $row->closes_at ? substr($row->closes_at, 0, 8) : null,
         'is_closed' => (bool) $row->is_closed,
       ];
     }
 
-    // --- NEW: compute total cutoff minutes for the items in this checkout (sum cutoff_minutes * qty)
     $totalCutoffMinutes = 0;
     foreach ($checkoutCart as $it) {
       $prod = $products[$it['product_id']] ?? null;
@@ -94,71 +117,87 @@ class CheckoutCartController extends Controller
       $totalCutoffMinutes += $cut * $qty;
     }
 
-    // Pass single business's items (not grouped by business) to blade
+    Log::info('Rendering cart checkout view', [
+      'method' => __METHOD__,
+      'user_id' => $user?->user_id,
+      'business_id' => $businessId,
+      'items_count' => $checkoutCart->count(),
+      'total' => $total,
+    ]);
+
     return view('content.customer.customer-cart-checkout', [
       'business_id' => $businessId,
-      'cart' => $checkoutCart,            // collection of items for this business only
+      'cart' => $checkoutCart,
       'total' => $total,
       'products' => $products,
       'user' => $user,
       'fullName' => $user?->fullname,
       'contactNumber' => $customer?->contact_number,
-      'vendors' => $vendors,              // keyed by business_id (only contains $businessId)
-      'openingHours' => $openingHours,    // <-- for the JS that populates delivery_time
+      'vendor' => $vendor,
+      'vendors' => $vendors,
+      'openingHours' => $openingHours,
       'cutoffMinutes' => $totalCutoffMinutes,
     ]);
   }
 
   /**
    * Store/submit the cart checkout.
-   *
-   * Payment method is expected to be provided per-business as payment_method[business_id]
-   * but we also accept scalar "payment_method" for single-business checkout.
+   */
+  /**
+   * Accepts checkout form POST and creates CheckoutDraft(s) for each business found in cart.
+   * Important notes:
+   *  - Validates request fields and normalizes 'order_type' into each draft delivery payload.
+   *  - Overwrites item prices using DB values to avoid stale client-side manipulation.
+   *  - For online payments: creates a PayMongo checkout_session and stores the payment_intent id
+   *    (transaction_id) on the draft to enable refunds and later association.
+   *  - For COD drafts: marks them for immediate processing and converts drafts into Orders.
+   *  - Stores 'checkout_flow_draft_ids' in session to track the flow across redirects/webhooks.
+   *  - All write operations are performed inside DB transactions; any exception will rollback.
    */
   public function store(Request $request)
   {
-    // Basic validation: delivery date must be today or later; phone in local format
+    Log::info('Entered store()', ['method' => __METHOD__, 'user_id' => Auth::id()]);
+
     $request->validate([
+      'order_type' => 'required|in:delivery,pickup',
       'delivery_date' => 'required|date|after_or_equal:today',
-      // allow HH:MM or HH:MM:SS format — store as string
       'delivery_time' => ['required', 'regex:/^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/'],
       'full_name' => 'required|string|max:255',
       'phone_number' => 'required|string|max:11|regex:/^09\d{9}$/',
-      'region' => 'required|string|max:100',
-      'province' => 'required|string|max:100',
-      'city' => 'required|string|max:100',
-      'barangay' => 'required|string|max:100',
-      'postal_code' => 'required|string|max:20',
-      'street_name' => 'required|string|max:255',
-      // payment_method can be an array or scalar — presence required
+
+      'region' => 'required_if:order_type,delivery|nullable|string|max:100',
+      'province' => 'required_if:order_type,delivery|nullable|string|max:100',
+      'city' => 'required_if:order_type,delivery|nullable|string|max:100',
+      'barangay' => 'required_if:order_type,delivery|nullable|string|max:100',
+      'postal_code' => 'required_if:order_type,delivery|nullable|string|max:20',
+      'street_name' => 'required_if:order_type,delivery|nullable|string|max:255',
+
       'payment_method' => 'required',
       'item_notes' => 'nullable|array',
-      'business_id' => 'required' // ensure we receive the intended business id
+      'business_id' => 'required'
     ]);
 
     $cartSession = collect(session('cart', []));
     if ($cartSession->isEmpty()) {
+      Log::warning('Attempt to store with empty cart session', ['method' => __METHOD__, 'user_id' => Auth::id()]);
       return back()->withErrors(['error' => 'Your cart is empty.']);
     }
 
     $user = Auth::user();
 
-    // Enrich and filter cart: attach business_id and availability, then remove unavailable
     $cart = $cartSession->map(function ($item) {
       $prod = Product::select('product_id', 'business_id', 'is_available', 'price', 'item_name')->find($item['product_id']);
       $item['business_id'] = $prod?->business_id;
       $item['is_unavailable'] = !$prod || !$prod->is_available;
-      // Always overwrite with DB price so checkout_drafts/cart can't contain stale session prices
       $item['price'] = (float)($prod?->price ?? 0);
       return $item;
     })->filter(fn($i) => empty($i['is_unavailable']))->values();
 
-
     if ($cart->isEmpty()) {
+      Log::warning('All selected products became unavailable', ['method' => __METHOD__, 'user_id' => $user->user_id]);
       return back()->withErrors(['error' => 'All selected products became unavailable.']);
     }
 
-    // --- NEW: restrict to the business_id submitted by the checkout form (single-business checkout) ---
     $businessIdFromForm = $request->input('business_id');
     if ($businessIdFromForm) {
       $cart = $cart->filter(function ($i) use ($businessIdFromForm) {
@@ -166,11 +205,11 @@ class CheckoutCartController extends Controller
       })->values();
 
       if ($cart->isEmpty()) {
+        Log::warning('No checkoutable items found after restricting by business_id', ['method' => __METHOD__, 'business_id' => $businessIdFromForm]);
         return back()->withErrors(['error' => 'No checkoutable items found for this vendor.']);
       }
     }
 
-    // Group by business so we create one CheckoutDraft per business (will be only one when restricting)
     $cartByBusiness = $cart->groupBy('business_id');
 
     $onlineSessions = [];
@@ -179,29 +218,22 @@ class CheckoutCartController extends Controller
     $hasOnline = false;
     $hasCod = false;
 
-    // Determine selected payment_method(s) input shape
     $paymentInput = $request->input('payment_method');
-    // selected pm ids array (values) — if scalar, make single-element array
     $selectedPmIds = is_array($paymentInput) ? array_values($paymentInput) : [$paymentInput];
 
-    // Precompute whether exactly one online payment is selected across the flow
     $onlineCount = collect($selectedPmIds)->filter(function ($pmid) {
       $pm = PaymentMethod::find($pmid);
       if (!$pm) return false;
       $name = strtolower(trim($pm->method_name));
-      return !in_array($name, ['cash on delivery', 'cod', 'card on delivery']);
+      return !in_array($name, ['cash', 'cod', 'card on delivery']);
     })->count();
     $globalIsSingleOnlinePayment = ($onlineCount === 1);
 
     DB::beginTransaction();
     try {
-      // ensure previous cancelled trackers removed
       session()->forget('flow_cancelled_drafts');
 
       foreach ($cartByBusiness as $businessId => $items) {
-        // Accept both forms:
-        // 1) array input: payment_method[businessId] => id
-        // 2) scalar input: payment_method => id (single-business)
         $pmId = $request->input("payment_method.$businessId") ?? $request->input('payment_method');
 
         if (empty($pmId)) {
@@ -215,7 +247,7 @@ class CheckoutCartController extends Controller
 
         $deliveryData = $request->only([
           'delivery_date',
-          'delivery_time', // ensure this is included
+          'delivery_time',
           'full_name',
           'phone_number',
           'street_name',
@@ -227,13 +259,13 @@ class CheckoutCartController extends Controller
           'latitude',
           'longitude'
         ]);
-        $deliveryData['user_id'] = $user->user_id;
 
+        $deliveryData['user_id'] = $user->user_id;
+        $deliveryData['order_type'] = $request->input('order_type');
         $itemNotes = $request->input('item_notes', []);
 
-        $isCod = in_array($methodName, ['cash on delivery', 'cod', 'card on delivery']);
+        $isCod = in_array($methodName, ['cash', 'cod', 'card on delivery']);
 
-        // Create draft
         $draft = CheckoutDraft::create([
           'user_id' => $user->user_id,
           'payment_method_id' => $pmId,
@@ -244,6 +276,8 @@ class CheckoutCartController extends Controller
           'is_cod' => $isCod,
         ]);
 
+        Log::info('CheckoutDraft created (cart)', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id, 'business_id' => $businessId, 'is_cod' => $isCod, 'total' => $total]);
+
         $allDraftsInFlow[] = $draft;
 
         if ($isCod) {
@@ -252,7 +286,6 @@ class CheckoutCartController extends Controller
         } else {
           $hasOnline = true;
 
-          // Build line items for PayMongo (amounts in cents)
           $line = $items->map(function ($i) {
             $prod = Product::find($i['product_id']);
             return [
@@ -265,7 +298,6 @@ class CheckoutCartController extends Controller
 
           $business = BusinessDetail::find($businessId);
 
-          // Determine callback URLs
           if ($globalIsSingleOnlinePayment) {
             $successUrl = route('payment.callback.success');
             $cancelUrl = route('payment.callback.failed', ['draft_id' => $draft->checkout_draft_id]);
@@ -295,9 +327,6 @@ class CheckoutCartController extends Controller
 
           $data = $response->json();
 
-          // --- START MODIFICATION ---
-          // We must get the payment_intent_id for refunds, not the session_id.
-
           $paymentIntentId = $data['data']['attributes']['payment_intent']['id'] ?? null;
           $checkoutUrl = $data['data']['attributes']['checkout_url'] ?? null;
 
@@ -306,19 +335,18 @@ class CheckoutCartController extends Controller
             throw new Exception("PayMongo error: " . ($data['errors'][0]['detail'] ?? json_encode($data)));
           }
 
-          // Save the Payment Intent ID (pi_...) which is required for refunds
           $draft->update(['transaction_id' => $paymentIntentId]);
-          // --- END MODIFICATION ---
 
           $onlineSessions[] = [
             'draft_id' => $draft->checkout_draft_id,
             'business_name' => $business?->business_name,
             'checkout_url' => $checkoutUrl
           ];
+
+          Log::info('Online session prepared for draft', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id, 'checkout_url' => $checkoutUrl]);
         }
       }
 
-      // Save draft ids in session to check status later and for processing after webhooks
       session([
         'checkout_flow_draft_ids' => collect($allDraftsInFlow)->pluck('checkout_draft_id')->all(),
         'checkout_flow_type' => 'cart'
@@ -326,36 +354,39 @@ class CheckoutCartController extends Controller
 
       DB::commit();
 
+      Log::info('Cart store committed', ['method' => __METHOD__, 'user_id' => $user->user_id, 'draft_count' => count($allDraftsInFlow)]);
+
       return $this->handlePaymentScenarios($hasOnline, $hasCod, $onlineSessions, $codDrafts);
     } catch (Exception $e) {
       DB::rollBack();
-      Log::error('Cart checkout failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+      Log::error('Cart checkout failed', ['method' => __METHOD__, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
       return back()->withErrors(['error' => 'Checkout failed. Please try again.']);
     }
   }
 
-
   /**
-   * Decides next steps depending on presence of online / cod drafts.
+   * Decide next steps based on a mix of online / COD drafts.
+   * - Redirects to PayMongo checkout when appropriate (single or multiple sessions)
+   * - Immediately processes COD drafts (inside a DB transaction) and removes processed items
+   *   from the session cart.
+   * - When mixed, COD drafts are processed and online sessions are returned for user action.
+   * Logs the decision and deduplicates online sessions by checkout_url.
    */
   private function handlePaymentScenarios($hasOnlinePayment, $hasCodPayment, $onlinePaymentSessions, $codDrafts)
   {
-    // Log what we received so you can inspect in storage/logs/laravel.log
     Log::info('handlePaymentScenarios called', [
+      'method' => __METHOD__,
       'hasOnlinePayment' => $hasOnlinePayment,
       'hasCodPayment' => $hasCodPayment,
       'raw_onlineSessions' => $onlinePaymentSessions,
       'cod_count' => count($codDrafts),
     ]);
 
-    // Defensive: normalize / deduplicate online sessions by checkout_url (or draft_id)
     $unique = [];
     $dedupedOnlineSessions = [];
     foreach ($onlinePaymentSessions as $s) {
-      // use checkout_url if available, fallback to draft_id
       $key = $s['checkout_url'] ?? ($s['draft_id'] ?? null);
       if ($key === null) {
-        // keep entries with no key as-is but avoid silent duplicates
         $dedupedOnlineSessions[] = $s;
         continue;
       }
@@ -367,24 +398,20 @@ class CheckoutCartController extends Controller
       }
     }
 
-    // Log deduped array
     Log::info('handlePaymentScenarios: deduped online sessions', [
       'count' => count($dedupedOnlineSessions),
       'sessions' => $dedupedOnlineSessions,
     ]);
 
-    // Only online payments
     if ($hasOnlinePayment && !$hasCodPayment) {
       if (count($dedupedOnlineSessions) === 1) {
-        // single session -> direct redirect
+        Log::info('Redirecting to single online checkout URL', ['checkout_url' => $dedupedOnlineSessions[0]['checkout_url']]);
         return redirect()->away($dedupedOnlineSessions[0]['checkout_url']);
       }
 
-      // multiple -> show auto-open page
       return response()->view('payment.auto-open-multiple', ['checkoutSessions' => $dedupedOnlineSessions, 'type' => 'cart']);
     }
 
-    // Only COD
     if (!$hasOnlinePayment && $hasCodPayment) {
       try {
         DB::transaction(function () use ($codDrafts) {
@@ -394,17 +421,21 @@ class CheckoutCartController extends Controller
           }
         });
 
-        // remove processed items from session cart
         $this->removeProcessedItemsFromCart(collect($codDrafts));
 
-        return redirect()->route('customer.orders.index')->with('success', 'Your Cash on Delivery order(s) have been placed!');
+        Log::info('Processed COD-only drafts', ['count' => count($codDrafts)]);
+
+        return redirect()->route('customer.orders.index')
+          ->with('success', 'Your Cash order(s) have been placed!')
+          ->header('Cache-Control', 'no-cache, no-store, must-revalidate') // HTTP 1.1.
+          ->header('Pragma', 'no-cache') // HTTP 1.0.
+          ->header('Expires', '0');
       } catch (Exception $e) {
-        Log::error('COD only processing failed', ['error' => $e->getMessage()]);
+        Log::error('COD only processing failed', ['method' => __METHOD__, 'error' => $e->getMessage()]);
         return back()->withErrors(['error' => 'COD order processing failed.']);
       }
     }
 
-    // Mixed payments: process COD drafts immediately, keep online sessions to redirect user
     if ($hasOnlinePayment && $hasCodPayment) {
       try {
         DB::transaction(function () use ($codDrafts) {
@@ -416,7 +447,6 @@ class CheckoutCartController extends Controller
 
         $this->removeProcessedItemsFromCart(collect($codDrafts));
 
-        // flag session so system knows it's a mixed flow
         session(['has_mixed_payment' => true]);
 
         if (count($dedupedOnlineSessions) === 1) {
@@ -425,7 +455,7 @@ class CheckoutCartController extends Controller
 
         return response()->view('payment.auto-open-multiple', ['checkoutSessions' => $dedupedOnlineSessions, 'type' => 'cart']);
       } catch (Exception $e) {
-        Log::error('Mixed Payment: COD processing failed', ['error' => $e->getMessage()]);
+        Log::error('Mixed Payment: COD processing failed', ['method' => __METHOD__, 'error' => $e->getMessage()]);
         return back()->withErrors(['error' => 'Failed to process your COD orders. Please try again.']);
       }
     }
@@ -433,12 +463,17 @@ class CheckoutCartController extends Controller
     return back()->withErrors(['error' => 'Invalid payment configuration.']);
   }
 
-
   /**
-   * Create order records for COD drafts immediately.
+   * Convert a COD CheckoutDraft into actual Order, OrderItems, DeliveryAddress and PaymentDetail.
+   * Important:
+   *  - This is idempotent-guarded: it checks processed_at to avoid double-processing.
+   *  - It respects 'order_type' (delivery vs pickup) and will null-out address fields for pickup.
+   *  - All DB inserts happen inside a transaction.
    */
   public function processCodOrderFromDraft(CheckoutDraft $draft)
   {
+    Log::info('processCodOrderFromDraft called', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id]);
+
     if (!$draft->is_cod) {
       throw new Exception("Draft {$draft->checkout_draft_id} is not a COD order");
     }
@@ -455,7 +490,9 @@ class CheckoutCartController extends Controller
 
     $businessId = collect($draft->cart)->pluck('business_id')->unique()->first();
 
-    DB::transaction(function () use ($user, $draft, $businessId) {
+    $orderType = $draft->delivery['order_type'] ?? 'delivery';
+
+    DB::transaction(function () use ($user, $draft, $businessId, $orderType) {
       $order = Order::create([
         'user_id' => $user->user_id,
         'business_id' => $businessId,
@@ -463,7 +500,6 @@ class CheckoutCartController extends Controller
         'delivery_date' => $draft->delivery['delivery_date'] ?? now()->toDateString(),
         'delivery_time' => $draft->delivery['delivery_time'] ?? null,
         'payment_method_id' => $draft->payment_method_id,
-        'status' => 'pending' // initial status
       ]);
 
       foreach ($draft->cart as $item) {
@@ -480,10 +516,40 @@ class CheckoutCartController extends Controller
         ]);
       }
 
-      DeliveryAddress::create(array_merge($draft->delivery, [
-        'order_id' => $order->order_id,
-        'full_address' => collect($draft->delivery)->except('user_id')->filter()->reverse()->join(', ')
-      ]));
+      $delivery = $draft->delivery ?? [];
+
+      $deliveryPayload = [
+        'order_id'       => $order->order_id,
+        'user_id'        => $draft->user_id,
+        'full_name'      => $delivery['full_name'] ?? null,
+        'phone_number'   => $delivery['phone_number'] ?? null,
+        'region'         => $delivery['region'] ?? null,
+        'province'       => $delivery['province'] ?? null,
+        'city'           => $delivery['city'] ?? null,
+        'barangay'       => $delivery['barangay'] ?? null,
+        'street_name'    => $delivery['street_name'] ?? null,
+        'postal_code'    => $delivery['postal_code'] ?? null,
+        'latitude'       => $delivery['latitude'] ?? null,
+        'longitude'      => $delivery['longitude'] ?? null,
+        'payment_option' => $delivery['payment_option'] ?? null,
+        'requires_receipt' => $delivery['requires_receipt'] ?? null,
+        'order_type'     => $delivery['order_type'] ?? null,
+        'full_address'   => null,
+      ];
+
+      if ($orderType === 'delivery') {
+        $deliveryPayload['full_address'] = collect($delivery)
+          ->except('user_id', 'order_type', 'payment_option', 'requires_receipt')
+          ->filter()
+          ->reverse()
+          ->join(', ');
+      } else {
+        foreach (['region', 'province', 'city', 'barangay', 'street_name', 'postal_code', 'latitude', 'longitude', 'full_address'] as $k) {
+          $deliveryPayload[$k] = null;
+        }
+      }
+
+      DeliveryAddress::create($deliveryPayload);
 
       PaymentDetail::create([
         'order_id' => $order->order_id,
@@ -497,10 +563,16 @@ class CheckoutCartController extends Controller
   }
 
   /**
-   * Process online orders from a draft after webhook / callback confirms payment.
+   * Convert an online (paid) CheckoutDraft into an Order after payment confirmation.
+   * Important:
+   *  - Ensures draft->is_cod is false and checks processed_at to avoid duplicates.
+   *  - Records PaymentDetail with transaction_id and marks payment as Paid.
+   *  - Creates PreOrder / PaymentDetail records identically to the COD flow where applicable.
    */
   public function processOnlineOrderFromDraft(CheckoutDraft $draft)
   {
+    Log::info('processOnlineOrderFromDraft called', ['method' => __METHOD__, 'draft_id' => $draft->checkout_draft_id]);
+
     if ($draft->is_cod) {
       throw new Exception("Attempted to process COD draft #{$draft->checkout_draft_id} as an online order.");
     }
@@ -510,17 +582,18 @@ class CheckoutCartController extends Controller
       return;
     }
 
-    DB::transaction(function () use ($draft) {
+    $orderType = $draft->delivery['order_type'] ?? 'delivery';
+
+    DB::transaction(function () use ($draft, $orderType) {
       $businessId = collect($draft->cart)->pluck('business_id')->first();
 
       $order = Order::create([
         'user_id' => $draft->user_id,
         'business_id' => $businessId,
         'total' => $draft->total,
-        'delivery_date' => $draft->delivery['delivery_date'] ?? now()->toDateString(), // ✅ FIXED
+        'delivery_date' => $draft->delivery['delivery_date'] ?? now()->toDateString(),
         'delivery_time' => $draft->delivery['delivery_time'] ?? now()->format('H:i:s'),
         'payment_method_id' => $draft->payment_method_id,
-        'status' => 'paid',
       ]);
 
       foreach ($draft->cart as $item) {
@@ -537,14 +610,40 @@ class CheckoutCartController extends Controller
         ]);
       }
 
-      DeliveryAddress::create(array_merge($draft->delivery, [
-        'order_id' => $order->order_id,
-        'full_address' => collect($draft->delivery)
-          ->except('user_id')
+      $delivery = $draft->delivery ?? [];
+
+      $deliveryPayload = [
+        'order_id'       => $order->order_id,
+        'user_id'        => $draft->user_id,
+        'full_name'      => $delivery['full_name'] ?? null,
+        'phone_number'   => $delivery['phone_number'] ?? null,
+        'region'         => $delivery['region'] ?? null,
+        'province'       => $delivery['province'] ?? null,
+        'city'           => $delivery['city'] ?? null,
+        'barangay'       => $delivery['barangay'] ?? null,
+        'street_name'    => $delivery['street_name'] ?? null,
+        'postal_code'    => $delivery['postal_code'] ?? null,
+        'latitude'       => $delivery['latitude'] ?? null,
+        'longitude'      => $delivery['longitude'] ?? null,
+        'payment_option' => $delivery['payment_option'] ?? null,
+        'requires_receipt' => $delivery['requires_receipt'] ?? null,
+        'order_type'     => $delivery['order_type'] ?? null,
+        'full_address'   => null,
+      ];
+
+      if ($orderType === 'delivery') {
+        $deliveryPayload['full_address'] = collect($delivery)
+          ->except('user_id', 'order_type', 'payment_option', 'requires_receipt')
           ->filter()
           ->reverse()
-          ->join(', '),
-      ]));
+          ->join(', ');
+      } else {
+        foreach (['region', 'province', 'city', 'barangay', 'street_name', 'postal_code', 'latitude', 'longitude', 'full_address'] as $k) {
+          $deliveryPayload[$k] = null;
+        }
+      }
+
+      DeliveryAddress::create($deliveryPayload);
 
       PaymentDetail::create([
         'order_id' => $order->order_id,
@@ -560,11 +659,10 @@ class CheckoutCartController extends Controller
     });
   }
 
-  /**
-   * Process any remaining drafts saved in session for a given user (used after return from payment flows).
-   */
   public function processRemainingDrafts($userId)
   {
+    Log::debug('processRemainingDrafts called', ['method' => __METHOD__, 'user_id' => $userId]);
+
     $draftIdsInFlow = session('checkout_flow_draft_ids', []);
     if (empty($draftIdsInFlow)) {
       return;
@@ -581,7 +679,6 @@ class CheckoutCartController extends Controller
           $this->processCodOrderFromDraft($draft);
           $draft->update(['processed_at' => now()]);
         }
-        // online drafts are processed by webhook/payment callback, so skip here
       } catch (Exception $e) {
         Log::error('Failed to process a remaining COD draft', ['draft_id' => $draft->checkout_draft_id, 'error' => $e->getMessage()]);
         continue;
@@ -589,11 +686,10 @@ class CheckoutCartController extends Controller
     }
   }
 
-  /**
-   * Status endpoint to report progress of online checkout sessions in the current flow.
-   */
   public function status()
   {
+    Log::debug('status called', ['method' => __METHOD__]);
+
     $draftIdsInFlow = session('checkout_flow_draft_ids', []);
     if (empty($draftIdsInFlow)) {
       return response()->json(['status' => 'error'], 404);
@@ -637,9 +733,6 @@ class CheckoutCartController extends Controller
     ]);
   }
 
-  /**
-   * Choose the PayMongo gateway type based on payment method metadata or method name.
-   */
   private function getPayMongoGatewayType($methodName, $paymentMethod)
   {
     $validGatewayTypes = ['card', 'gcash', 'paymaya'];
@@ -659,12 +752,14 @@ class CheckoutCartController extends Controller
   }
 
   /**
-   * Remove processed cart items from session after successful order creation.
-   *
-   * @param \Illuminate\Support\Collection $processedDrafts
+   * Remove processed items from the user's session('cart').
+   * - Collects product IDs from processed drafts and rejects them from session cart.
+   * - Logs which product IDs were removed.
    */
   public function removeProcessedItemsFromCart($processedDrafts)
   {
+    Log::debug('removeProcessedItemsFromCart called', ['method' => __METHOD__]);
+
     if (empty($processedDrafts) || collect($processedDrafts)->isEmpty()) {
       return;
     }
@@ -682,43 +777,43 @@ class CheckoutCartController extends Controller
   }
 
   /**
-   * Handles the cancellation request from the customer.
-   * Issues a refund via PayMongo if the order was paid online.
+   * Attempt to cancel an existing order for the authenticated user.
+   * Important behaviors:
+   *  - Verifies that all order items are still in 'Pending' status before canceling.
+   *  - For online payments: finds the associated payment via PaymentDetail.transaction_id,
+   *    looks up the 'pay_...' ID from the Payment Intent, and issues a refund via PayMongo.
+   *  - For COD/offline: simply updates order items and payment detail statuses locally.
+   *  - All external API calls and DB updates are logged for auditability.
    */
   public function cancelOrder(Request $request, $order_id)
   {
-    Log::info("Attempting to cancel order #{$order_id} for user " . Auth::id());
+    Log::info("Attempting to cancel order #{$order_id} for user " . Auth::id(), ['method' => __METHOD__]);
 
     DB::beginTransaction();
     try {
-      // Find the order, and load its payment details and payment method
       $order = Order::with('paymentDetails.paymentMethod', 'items')
         ->where('order_id', $order_id)
-        ->where('user_id', Auth::id()) // Ensure user owns this order
+        ->where('user_id', Auth::id())
         ->firstOrFail();
 
-      // 1. Check if order is eligible for cancellation
       $canCancel = $order->items->every(fn($item) => $item->order_item_status === 'Pending');
 
       if (!$canCancel) {
         DB::rollBack();
+        Log::warning('Cancel attempt for non-cancellable order', ['order_id' => $order->order_id, 'user_id' => Auth::id()]);
         return back()->with('error', 'This order can no longer be cancelled as it is already being processed.');
       }
 
-      // 2. Check payment type
       $paymentDetail = $order->paymentDetails->first();
       $paymentMethod = $paymentDetail?->paymentMethod;
       $isCod = false;
 
       if ($paymentMethod) {
         $methodName = strtolower(trim($paymentMethod->method_name));
-        $isCod = in_array($methodName, ['cash on delivery', 'cod', 'card on delivery']);
+        $isCod = in_array($methodName, ['cash', 'cod', 'card on delivery']);
       }
 
-      // 3. Handle cancellation
       if ($isCod || !$paymentDetail || !$paymentDetail->transaction_id || $paymentDetail->payment_status !== 'Paid') {
-
-        // --- CASE 1: COD or PENDING/FAILED PAYMENT ---
         Log::info("Cancelling COD/Offline order #{$order->order_id} locally.");
 
         $order->items()->update(['order_item_status' => 'Cancelled']);
@@ -726,18 +821,12 @@ class CheckoutCartController extends Controller
           $paymentDetail->update(['payment_status' => 'Cancelled']);
         }
       } else {
-
-        // --- CASE 2: ONLINE PAYMENT (GCash, Card, etc.) ---
         Log::info("Processing PayMongo refund for order #{$order->order_id}");
 
-        // This is the 'pi_...' ID you saved in the database
         $paymentIntentId = $paymentDetail->transaction_id;
-        $refundAmount = (int) round($order->total * 100); // Amount in cents
+        $refundAmount = (int) round($order->total * 100);
         $paymongoSecret = config('services.paymongo.secret');
 
-        // --- START MODIFICATION (FIX FOR 'payment_id required') ---
-
-        // STEP A: First, retrieve the Payment Intent to get the 'pay_...' ID
         Log::info("Retrieving Payment Intent {$paymentIntentId} to find payment_id");
 
         $retrieveResponse = Http::withHeaders([
@@ -747,7 +836,6 @@ class CheckoutCartController extends Controller
 
         $intentData = $retrieveResponse->json();
 
-        // Get the *actual* payment ID from the 'payments' array
         $paymentId = $intentData['data']['attributes']['payments'][0]['id'] ?? null;
 
         if (!$paymentId) {
@@ -757,7 +845,6 @@ class CheckoutCartController extends Controller
 
         Log::info("Found payment_id {$paymentId} for refund.");
 
-        // STEP B: Now, create the refund using the 'pay_...' ID
         $response = Http::withHeaders([
           'accept' => 'application/json',
           'content-type' => 'application/json',
@@ -766,17 +853,11 @@ class CheckoutCartController extends Controller
           'data' => [
             'attributes' => [
               'amount' => $refundAmount,
-
-              // FIX 1: Use 'payment_id' with the 'pay_...' ID we just fetched
               'payment_id' => $paymentId,
-
-              // FIX 2: Use the correct 'reason' string
               'reason' => 'requested_by_customer'
             ]
           ]
         ]);
-
-        // --- END MODIFICATION ---
 
         $responseData = $response->json();
 
@@ -788,21 +869,22 @@ class CheckoutCartController extends Controller
 
           $paymentDetail->update([
             'payment_status' => 'Refunded',
-            // 'notes' => 'Refund ID: ' . ($responseData['data']['id'] ?? 'N/A')
           ]);
         } else {
-          // Refund API call failed
           Log::error("PayMongo refund FAILED for order #{$order->order_id}", ['response' => $responseData]);
           throw new Exception('The payment gateway rejected the refund request. Please contact support.');
         }
       }
 
-      // 4. Commit and Redirect
       DB::commit();
-      return redirect()->route('customer.orders.index')->with('success', 'Order has been successfully cancelled.');
+      return redirect()->route('customer.orders.index')
+        ->with('success', 'Order has been successfully cancelled.')
+        ->header('Cache-Control', 'no-cache, no-store, must-revalidate') // HTTP 1.1.
+        ->header('Pragma', 'no-cache') // HTTP 1.0.
+        ->header('Expires', '0');
     } catch (Exception $e) {
       DB::rollBack();
-      Log::error("Failed to cancel order #{$order_id}", ['error' => $e->getMessage()]);
+      Log::error("Failed to cancel order #{$order_id}", ['method' => __METHOD__, 'error' => $e->getMessage()]);
       return back()->with('error', 'Failed to cancel order: ' . $e->getMessage());
     }
   }
