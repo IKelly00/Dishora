@@ -11,8 +11,8 @@
 
     <style>
         /* ================================
-                                                                                                                                                                                                                              CONTAINER & LAYOUT BASE
-                                                                                                                                                                                                                          ================================== */
+                                                                                                                                                                                                                                  CONTAINER & LAYOUT BASE
+                                                                                                                                                                                                                              ================================== */
         .container {
             padding: 1.5rem;
             max-width: 100%;
@@ -45,8 +45,8 @@
 
 
         /* ================================
-                                                                                                                                                                                                                                       CARD STYLING (SHARED)
-                                                                                                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                           CARD STYLING (SHARED)
+                                                                                                                                                                                                                                        ================================== */
         .card {
             background: #ffffff;
             border: 1px solid #e5e7eb;
@@ -85,8 +85,8 @@
 
 
         /* ================================
-                                                                                                                                                                                                                                       CARD IMAGE (SHARED)
-                                                                                                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                           CARD IMAGE (SHARED)
+                                                                                                                                                                                                                                        ================================== */
         .card-img-wrapper {
             position: relative;
             padding-top: 60%;
@@ -112,8 +112,8 @@
 
 
         /* ================================
-                                                                                                                                                                                                                                       CARD BODY TEXT
-                                                                                                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                           CARD BODY TEXT
+                                                                                                                                                                                                                                        ================================== */
         .card-body {
             padding: 0.875rem;
         }
@@ -150,8 +150,8 @@
 
 
         /* ================================
-                                                                                                                                                                                                                                       BUTTONS
-                                                                                                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                           BUTTONS
+                                                                                                                                                                                                                                        ================================== */
         .btn-primary {
             background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
             border: none;
@@ -184,8 +184,8 @@
 
 
         /* ================================
-                                                                                                                                                                                                                                       BADGES
-                                                                                                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                           BADGES
+                                                                                                                                                                                                                                        ================================== */
         .badge.bg-success {
             background-color: #bbf7d0 !important;
             color: #166534;
@@ -205,8 +205,8 @@
 
 
         /* ================================
-                                                                                                                                                                                                                                       LOCATION MESSAGE
-                                                                                                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                           LOCATION MESSAGE
+                                                                                                                                                                                                                                        ================================== */
         #location-source-message {
             background: #f9fafb;
             padding: 0.55rem 0.6rem;
@@ -227,8 +227,8 @@
 
 
         /* ================================
-                                                                                                                                                                                                                                       SCROLLABLE STRIPS (Products & Vendors)
-                                                                                                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                           SCROLLABLE STRIPS (Products & Vendors)
+                                                                                                                                                                                                                                        ================================== */
         .products-scroll-container,
         .vendors-scroll-container {
             position: relative;
@@ -319,8 +319,8 @@
 
 
         /* ================================
-                                                                                                                                                                                                                                       LOADER OVERLAY
-                                                                                                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                           LOADER OVERLAY
+                                                                                                                                                                                                                                        ================================== */
         .vendors-wrapper {
             position: relative;
             min-height: 400px;
@@ -352,6 +352,7 @@
 
         /* Product badge size */
         .dietary-badge {
+            margin-bottom: 0.3rem;
             font-size: 0.65rem;
             /* Adjust this value as needed */
             padding: 0.2em 0.4em;
@@ -407,8 +408,8 @@
 
 
         /* ================================
-                                                                                                                                                                                                                                       RESPONSIVE ADJUSTMENTS
-                                                                                                                                                                                                                                    ================================== */
+                                                                                                                                                                                                                                           RESPONSIVE ADJUSTMENTS
+                                                                                                                                                                                                                                        ================================== */
         @media (max-width: 768px) {
 
             .product-card,
@@ -755,23 +756,23 @@
                                       ${
                                         vendor.verification_status?.toLowerCase() === 'approved'
                                           ? `<svg class="verified-icon"
-                                                                                                                     width="16" height="16"
-                                                                                                                     viewBox="0 0 16 16"
-                                                                                                                     xmlns="http://www.w3.org/2000/svg"
-                                                                                                                     style="display:block;">
-                                                                                                                  <circle cx="8" cy="8" r="8"
-                                                                                                                          fill="#16a34a"
-                                                                                                                          stroke="none" />
+                                                                                                                         width="16" height="16"
+                                                                                                                         viewBox="0 0 16 16"
+                                                                                                                         xmlns="http://www.w3.org/2000/svg"
+                                                                                                                         style="display:block;">
+                                                                                                                      <circle cx="8" cy="8" r="8"
+                                                                                                                              fill="#16a34a"
+                                                                                                                              stroke="none" />
 
-                                                                                                                  <path d="M4 8.5l2.5 2.5L12 5.5"
-                                                                                                                        fill="none"
-                                                                                                                        stroke="#ffffff"
-                                                                                                                        stroke-width="2.2"
-                                                                                                                        stroke-linecap="round"
-                                                                                                                        stroke-linejoin="round"
-                                                                                                                        shape-rendering="geometricPrecision"
-                                                                                                                        vector-effect="non-scaling-stroke" />
-                                                                                                                </svg>`
+                                                                                                                      <path d="M4 8.5l2.5 2.5L12 5.5"
+                                                                                                                            fill="none"
+                                                                                                                            stroke="#ffffff"
+                                                                                                                            stroke-width="2.2"
+                                                                                                                            stroke-linecap="round"
+                                                                                                                            stroke-linejoin="round"
+                                                                                                                            shape-rendering="geometricPrecision"
+                                                                                                                            vector-effect="non-scaling-stroke" />
+                                                                                                                    </svg>`
                                           : ''
                                       }
                                   </p>
