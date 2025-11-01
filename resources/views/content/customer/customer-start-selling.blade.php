@@ -190,16 +190,6 @@
             width: 100%;
             text-align: center;
         }
-
-        #business_image_preview img {
-            width: 320px;
-            /* wider preview */
-            height: 200px;
-            /* taller preview */
-            object-fit: cover;
-            border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-        }
     </style>
 
     <div class="container mb-4">
@@ -343,7 +333,7 @@
                                     </div>
                                     <div id="business_image_preview" style="display:none; cursor:pointer;">
                                         <img src="#" alt="Business Image Preview" class="rounded"
-                                            style="width:250px; height:150px; object-fit:cover;">
+                                            style="display: block; width:250px; height:180px; object-fit:contain;">
                                     </div>
                                 </div>
                                 <div class="mb-2">
@@ -621,54 +611,57 @@
                     <div class="row">
                         {{-- BIR Registration --}}
                         <div class="col-md-6 mb-4">
-                            <div class="border rounded p-3 h-100">
-                                <input type="hidden" name="business_duration" id="business_duration"
-                                    value="{{ old('business_duration') }}">
-                                <label class="form-label fw-bold">BIR Registration Upload <span
-                                        class="text-danger">*</span></label>
-                                <div class="border border-dashed p-4 text-center mb-2 bg-light drop-zone @error('bir_registration') is-invalid @enderror @error('business_duration') is-invalid @enderror"
-                                    style="cursor:pointer;" data-input-id="bir_registration_input"
-                                    data-display-id="bir_file_name">
-                                    <input type="file" name="bir_registration" class="d-none"
-                                        id="bir_registration_input">
-                                    <div class="upload-placeholder"> {{-- Added class --}}
-                                        <i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br>
-                                        <span class="text-muted">Drag & Drop or
-                                            <span class="text-primary">Choose file</span> to upload</span><br>
-                                        <small class="text-muted">Any file type</small> {{-- Updated text --}}
+                            <div class="border rounded p-3">
+                                <div class="flex-grow-1">
+                                    <input type="hidden" name="business_duration" id="business_duration"
+                                        value="{{ old('business_duration') }}">
+                                    <label class="form-label fw-bold">BIR Registration Upload <span
+                                            class="text-danger">*</span></label>
+                                    <div class="border border-dashed p-4 text-center mb-2 bg-light drop-zone @error('bir_registration') is-invalid @enderror @error('business_duration') is-invalid @enderror"
+                                        style="cursor:pointer;" data-input-id="bir_registration_input"
+                                        data-display-id="bir_file_name">
+                                        <input type="file" name="bir_registration" class="d-none"
+                                            id="bir_registration_input">
+                                        <div class="upload-placeholder"> {{-- Added class --}}
+                                            <i class="ri-upload-cloud-2-line" style="font-size: 1.8rem;"></i><br>
+                                            <span class="text-muted">Drag & Drop or
+                                                <span class="text-primary">Choose file</span> to upload</span><br>
+                                            <small class="text-muted">Any file type</small> {{-- Updated text --}}
+                                        </div>
+                                        <div class="file-preview-container" style="display: none;"> {{-- Added container --}}
+                                            <img src="#" alt="Preview"
+                                                class="img-fluid rounded mb-2 file-preview-img"
+                                                style="max-height: 100px; display: none;">
+                                        </div>
                                     </div>
-                                    <div class="file-preview-container" style="display: none;"> {{-- Added container --}}
-                                        <img src="#" alt="Preview"
-                                            class="img-fluid rounded mb-2 file-preview-img"
-                                            style="max-height: 100px; display: none;">
-                                        {{-- Removed file name display from here --}}
-                                        {{-- <p class="mb-0 file-preview-name" style="word-break: break-all; font-size: 0.9em;"></p> --}}
-                                    </div>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label">File Uploaded</label>
-                                    <input type="text" class="form-control form-control-sm" id="bir_file_name"
-                                        value="{{ old('bir_registration') ? basename(old('bir_registration')) : 'None' }}"
-                                        readonly>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <div><small class="text-muted"><i class="ri-information-line"></i> <a href="#"
-                                                onclick="showBusinessDurationModal(event)">Doesn’t have BIR?</a></small>
-                                    </div>
-                                    <div>
-                                        <button type="button" class="btn btn-sm btn-secondary cancel-btn"
-                                            data-input="bir_registration_input"
-                                            data-display="bir_file_name">Remove</button>
-                                        <button type="button" class="btn btn-sm btn-primary import-btn"
-                                            data-input="bir_registration_input">Upload</button>
+                                    <div class="mb-2">
+                                        <label class="form-label">File Uploaded</label>
+                                        <input type="text" class="form-control form-control-sm" id="bir_file_name"
+                                            value="{{ old('bir_registration') ? basename(old('bir_registration')) : 'None' }}"
+                                            readonly>
                                     </div>
                                 </div>
-                                @error('bir_registration')
-                                    <div class="error-message">{{ $message }}</div>
-                                @enderror
-                                @error('business_duration')
-                                    <div class="error-message">BIR file or Business Duration is required.</div>
-                                @enderror {{-- Combined error message --}}
+                                <div>
+                                    <div class="d-flex justify-content-between">
+                                        <div><small class="text-muted"><i class="ri-information-line"></i> <a
+                                                    href="#" onclick="showBusinessDurationModal(event)">Doesn’t have
+                                                    BIR?</a></small>
+                                        </div>
+                                        <div>
+                                            <button type="button" class="btn btn-sm btn-secondary cancel-btn"
+                                                data-input="bir_registration_input"
+                                                data-display="bir_file_name">Remove</button>
+                                            <button type="button" class="btn btn-sm btn-primary import-btn"
+                                                data-input="bir_registration_input">Upload</button>
+                                        </div>
+                                    </div>
+                                    @error('bir_registration')
+                                        <div class="error-message">{{ $message }}</div>
+                                    @enderror
+                                    @error('business_duration')
+                                        <div class="error-message">BIR file or Business Duration is required.</div>
+                                    @enderror {{-- Combined error message --}}
+                                </div>
                             </div>
                         </div>
 
@@ -1163,6 +1156,18 @@
                     console.warn('Address wiring error', e);
                 }
 
+                /* ---------- Phone Number Input Filtering ---------- */
+                const phoneInputEl = safeQuery('phone_number');
+                if (phoneInputEl) {
+                    phoneInputEl.addEventListener('keypress', function(e) {
+                        var charCode = (e.which) ? e.which : e.keyCode;
+                        // Allow control keys (like backspace, tab - charCode < 32)
+                        // and allow numbers (48-57)
+                        if (charCode > 31 && (charCode < 48 || charCode > 57)) {
+                            e.preventDefault(); // Prevent non-numeric keys
+                        }
+                    });
+                }
 
                 /* ---------- Multistep Form Navigation & State ---------- */
                 function setInitialStepState() {
@@ -1220,7 +1225,8 @@
                 function validateStep1() {
                     removeErrors('#step1');
                     let ok = true;
-                    // Check required fields in step 1
+
+                    // existing required check
                     ['fullname', 'phone_number', 'business_name', 'business_type', 'business_description',
                         'region_hidden', 'province_hidden', 'city_hidden', 'barangay_select', 'street_name',
                         'postal_code'
@@ -1228,16 +1234,36 @@
                         const el = safeQuery(id);
                         if (!el || !String(el.value || '').trim()) {
                             ok = false;
-                            // Find the *visible* element to apply the class to
                             let visibleEl = el;
-                            if (id.includes('_hidden')) {
-                                visibleEl = safeQuery(id.replace('_hidden', '_select'));
-                            }
+                            if (id.includes('_hidden')) visibleEl = safeQuery(id.replace('_hidden',
+                                '_select'));
                             visibleEl?.classList.add('is-invalid');
                             visibleEl?.closest('.input-group')?.classList.add('is-invalid');
                         }
                     });
-                    // Check opening hours consistency
+
+                    /* --- PHONE NUMBER VALIDATION ADDITION --- */
+                    const phoneInput = safeQuery('phone_number');
+                    if (phoneInput) {
+                        const phoneVal = phoneInput.value.trim();
+                        const pattern = /^09\d{9}$/; // 11-digit format: starts with 09
+                        phoneInput.value = phoneVal.replace(/\D/g, ''); // enforce numerics only
+                        if (!pattern.test(phoneInput.value)) {
+                            ok = false;
+                            phoneInput.classList.add('is-invalid');
+                            if (!phoneInput.closest('.col-md-6')?.querySelector('.error-message')) {
+                                const err = document.createElement('div');
+                                err.className = 'error-message';
+                                err.textContent = 'Phone number must start with 09 and contain 11 digits only.';
+                                // insert AFTER the entire input-group’s parent column
+                                const container = phoneInput.closest('.col-md-6');
+                                container.appendChild(err);
+                            }
+                        }
+                    }
+                    /* --- END PHONE NUMBER VALIDATION --- */
+
+                    // existing Opening Hours validation continues…
                     let hasOpenDay = false;
                     let openDayValid = true;
                     ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].forEach(
@@ -1254,10 +1280,19 @@
                                 }
                             }
                         });
+
+                    /* --- OPENING HOURS REQUIREMENT ADDITION --- */
+                    if (!hasOpenDay) {
+                        ok = false;
+                        toastr.error('Please set at least one day as Open before proceeding.');
+                    }
+                    /* --- END OPENING HOURS ADDITION --- */
+
                     if (hasOpenDay && !openDayValid) {
                         ok = false;
                         toastr.error('Provide open/close times for days marked Open.');
                     }
+
                     if (!ok && !toastr.active) toastr.error(
                         'Please fill required fields in Business Information.');
                     return ok;
@@ -1546,8 +1581,10 @@
 
                 function initPaymentChoices(nativeSelect) {
                     if (!nativeSelect) return;
+
+                    let choices;
                     try {
-                        const choices = new Choices(nativeSelect, {
+                        choices = new Choices(nativeSelect, {
                             removeItemButton: true,
                             searchEnabled: true,
                             placeholder: true,
@@ -1561,18 +1598,24 @@
                         window._PAYMENT_CHOICES_INSTANCE = null; // Fallback if Choices fails
                     }
 
+                    // ✅ Move this *after* Choices initialization, since `.choices__placeholder` is only created then
+                    const placeholderInit = document.querySelector('.choices__placeholder');
+                    if (placeholderInit && choices.getValue(true).length > 0) {
+                        placeholderInit.style.display = 'none';
+                    }
+
                     const changeTarget = window._PAYMENT_CHOICES_INSTANCE?.passedElement?.element ||
                         nativeSelect; // Use native select if Choices failed
 
                     changeTarget.addEventListener('change', () => {
                         try {
-                            const selected = window._PAYMENT_CHOICES_INSTANCE ? window
-                                ._PAYMENT_CHOICES_INSTANCE.getValue(true) : Array.from(nativeSelect
-                                    .selectedOptions || []).map(o => o.value);
-                            // Add new rows
+                            const selected = window._PAYMENT_CHOICES_INSTANCE ?
+                                window._PAYMENT_CHOICES_INSTANCE.getValue(true) :
+                                Array.from(nativeSelect.selectedOptions || []).map(o => o.value);
+
+                            // Add new rows for selected payment methods
                             selected.forEach(id => {
                                 const methodName = paymentMethodMap[id] || 'Unknown Method';
-                                // Preserve existing input values if the row is re-added
                                 const existingAccNum = qs(`input[name="account_number[${id}]"]`)
                                     ?.value || '';
                                 const existingAccName = qs(`input[name="account_name[${id}]"]`)
@@ -1580,6 +1623,7 @@
                                 createPaymentDetailRow(id, methodName, existingAccNum,
                                     existingAccName);
                             });
+
                             // Remove deselected rows
                             document.querySelectorAll('#payment_details_container .payment-detail-row')
                                 .forEach(row => {
@@ -1587,7 +1631,7 @@
                                     if (!selected.includes(mid)) row.remove();
                                 });
 
-                            // Clear validation on change for the main select
+                            // Clear validation if user selected/deselected
                             const paySelectWrapper = qs('.choices[data-type="select-multiple"]') ||
                                 nativeSelect;
                             paySelectWrapper.classList.remove('is-invalid');
@@ -1596,35 +1640,39 @@
                         } catch (err) {
                             console.warn('payment change handler error', err);
                         }
+
+                        // ✅ Hide the placeholder when items are present
+                        const placeholder = document.querySelector('.choices__placeholder');
+                        const hasSelection = window._PAYMENT_CHOICES_INSTANCE?.getValue(true)?.length >
+                            0;
+                        if (placeholder) placeholder.style.display = hasSelection ? 'none' : '';
                     });
 
-                    // Initial rendering of details for pre-selected options (e.g., from old input or db)
-                    const initiallySelected = window._PAYMENT_CHOICES_INSTANCE ? window
-                        ._PAYMENT_CHOICES_INSTANCE.getValue(true) : Array.from(nativeSelect.selectedOptions ||
-                        []).map(o => o.value);
+                    // Initial rendering of details for pre-selected options
+                    const initiallySelected = window._PAYMENT_CHOICES_INSTANCE ?
+                        window._PAYMENT_CHOICES_INSTANCE.getValue(true) :
+                        Array.from(nativeSelect.selectedOptions || []).map(o => o.value);
                     initiallySelected.forEach(id => {
-                        // Get values potentially already rendered by Blade's old() helper
                         const initialAccNum = qs(`input[name="account_number[${id}]"]`)?.value || '';
                         const initialAccName = qs(`input[name="account_name[${id}]"]`)?.value || '';
                         const methodName = paymentMethodMap[id] || 'Unknown Method';
                         createPaymentDetailRow(id, methodName, initialAccNum, initialAccName);
                     });
 
-                    // Ensure remove buttons added by Blade's old() helper work
+                    // Keep remove buttons functional
                     document.querySelectorAll('#payment_details_container .remove-payment-detail').forEach(
                         btn => {
-                            if (!btn.listenerAttached) { // Avoid attaching multiple listeners
+                            if (!btn.listenerAttached) {
                                 btn.addEventListener('click', () => {
                                     const row = btn.closest('.payment-detail-row');
                                     const mid = row?.getAttribute('data-method-id');
                                     if (mid) safeDeselectPayment(mid);
                                     row?.remove();
                                 });
-                                btn.listenerAttached = true; // Mark as attached
+                                btn.listenerAttached = true;
                             }
                         });
                 }
-
 
                 /* ---------- File Input & Drag-and-Drop Logic ---------- */
                 document.querySelectorAll('.drop-zone').forEach(zone => {
@@ -1636,10 +1684,7 @@
                     if (!fileInput || !displayInput) return;
 
                     zone.addEventListener('click', (e) => {
-                        // Prevent click if clicking on the preview image itself (optional)
-                        // if (e.target.tagName === 'IMG') return;
-                        if (inputId === 'valid_id_input') window.showValidIdModal(e);
-                        else fileInput.click();
+                        fileInput.click();
                     });
 
                     fileInput.addEventListener('change', () => {
@@ -1743,8 +1788,7 @@
 
                 document.querySelectorAll('.import-btn').forEach(b => b.addEventListener('click', () => {
                     const inputId = b.dataset.input;
-                    if (inputId === 'valid_id_input') window.showValidIdModal();
-                    else safeQuery(inputId)?.click();
+                    safeQuery(inputId)?.click();
                 }));
 
                 document.querySelectorAll('.cancel-btn').forEach(b => b.addEventListener('click', () => {
@@ -1833,17 +1877,7 @@
                         validIdTypeError.classList.add('d-none'); // Hide error initially
                         validIdModal.show();
                     };
-                    confirmValidIdTypeBtn?.addEventListener('click', () => {
-                        if (!validIdTypeSelect.value) {
-                            validIdTypeError.classList.remove(
-                                'd-none'); // Show error if no type selected
-                        } else {
-                            validIdTypeHidden.value = validIdTypeSelect.value; // Store selected type
-                            validIdModal.hide();
-                            safeQuery('valid_id_input')
-                                .click(); // Trigger file input click after type confirmation
-                        }
-                    });
+
                     // Reset selection in modal if closed without confirming
                     validIdModalElement.addEventListener('hidden.bs.modal', function() {
                         if (!validIdTypeHidden.value) validIdTypeSelect.value =
@@ -1986,7 +2020,6 @@
                         updateValidIdTypeDisplay(); // update visible element immediately
                         validIdModal.hide();
                         // Trigger file input click after type confirmation
-                        safeQuery('valid_id_input')?.click();
                     }
                 });
 

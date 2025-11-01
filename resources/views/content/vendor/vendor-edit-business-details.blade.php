@@ -1,6 +1,6 @@
 @extends('layouts/contentNavbarLayout')
 
-@section('title', 'Start Selling')
+@section('title', 'Update Business Details')
 
 @section('content')
     {{-- CSS Includes --}}
@@ -188,16 +188,6 @@
             width: 100%;
             text-align: center;
         }
-
-        #business_image_preview img {
-            width: 320px;
-            /* wider preview */
-            height: 200px;
-            /* taller preview */
-            object-fit: cover;
-            border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-        }
     </style>
 
     <div class="container mb-4">
@@ -349,7 +339,7 @@
                                         {{-- Note: Removed the extra semicolon here too --}}
                                         <img src="{{ $business->business_image ?? '#' }}" alt="Business Image Preview"
                                             class="rounded" {{-- Add display: block --}}
-                                            style="display: block; width:250px; height:150px; object-fit:cover;">
+                                            style="display: block; width:250px; height:180px; object-fit:contain;">
                                     </div>
                                 </div>
                                 <div class="mb-2">
@@ -504,48 +494,59 @@
                                     </tr>
                                 </thead>
                                 <tbody>
+                                <tbody>
                                     @foreach (['Mon' => 'Monday', 'Tue' => 'Tuesday', 'Wed' => 'Wednesday', 'Thu' => 'Thursday', 'Fri' => 'Friday', 'Sat' => 'Saturday', 'Sun' => 'Sunday'] as $short => $day)
                                         @php
-                                            // Get the data for the current day from the collection passed by the controller
-                                            $hour = $openingHoursByDay->get($day); // Use the correct variable name
+                                            // Get the data for the current day
+                                            $hour = $openingHoursByDay->get($day);
 
-                                            // Set defaults based on the database data or null if not found
-                                            $db_status = 'open'; // Default to open if no record exists for the day
+                                            // Set defaults
+                                            $db_status = 'open';
                                             $db_open_time = '';
                                             $db_close_time = '';
 
                                             if ($hour) {
-                                                // If a record exists for this day
+                                                // If a record exists, use its data
                                                 $db_status = $hour->is_closed ? 'closed' : 'open';
-                                                // Format time as H:i (e.g., 09:00) only if it's not closed and time exists
-    if (!$hour->is_closed) {
-        $db_open_time = $hour->opens_at
-            ? \Carbon\Carbon::parse($hour->opens_at)->format('H:i')
-            : '';
-        $db_close_time = $hour->closes_at
-            ? \Carbon\Carbon::parse($hour->closes_at)->format('H:i')
-            : '';
+                                                if (!$hour->is_closed) {
+                                                    $db_open_time = $hour->opens_at
+                                                        ? \Carbon\Carbon::parse($hour->opens_at)->format('H:i')
+                                                        : '';
+                                                    $db_close_time = $hour->closes_at
+                                                        ? \Carbon\Carbon::parse($hour->closes_at)->format('H:i')
+                                                        : '';
                                                 }
                                             }
+
+                                            // *** NEW LOGIC ***
+                                            // 1. Determine the effective status (handles old input from validation errors)
+                                            $effective_status = old("status.$day", $db_status);
+                                            $is_closed = $effective_status === 'closed';
+
+                                            // 2. Set final times, clearing them if status is closed
+                                            $final_open_time = !$is_closed ? old("open_time.$day", $db_open_time) : '';
+                                            $final_close_time = !$is_closed
+                                                ? old("close_time.$day", $db_close_time)
+                                                : '';
                                         @endphp
                                         <tr>
                                             <td>{{ $short }}</td>
                                             <td>
-                                                {{-- Use old() first, then fall back to the DB value ($db_open_time) --}}
+                                                {{-- MODIFIED: Added value and disabled attributes --}}
                                                 <input type="time"
                                                     class="form-control form-control-sm @error("open_time.$day") is-invalid @enderror"
-                                                    name="open_time[{{ $day }}]"
-                                                    value="{{ old("open_time.$day", $db_open_time) }}">
+                                                    name="open_time[{{ $day }}]" value="{{ $final_open_time }}"
+                                                    {{ $is_closed ? 'disabled' : '' }}>
                                                 @error("open_time.$day")
                                                     <div class="error-message">{{ $message }}</div>
                                                 @enderror
                                             </td>
                                             <td>
-                                                {{-- Use old() first, then fall back to the DB value ($db_close_time) --}}
+                                                {{-- MODIFIED: Added value and disabled attributes --}}
                                                 <input type="time"
                                                     class="form-control form-control-sm @error("close_time.$day") is-invalid @enderror"
                                                     name="close_time[{{ $day }}]"
-                                                    value="{{ old("close_time.$day", $db_close_time) }}">
+                                                    value="{{ $final_close_time }}" {{ $is_closed ? 'disabled' : '' }}>
                                                 @error("close_time.$day")
                                                     <div class="error-message">{{ $message }}</div>
                                                 @enderror
@@ -554,13 +555,13 @@
                                                 <select
                                                     class="form-select form-select-sm @error("status.$day") is-invalid @enderror"
                                                     name="status[{{ $day }}]">
-                                                    {{-- Use old() first, then fall back to the DB value ($db_status) --}}
+                                                    {{-- MODIFIED: Using $effective_status for selection --}}
                                                     <option value="open"
-                                                        {{ old("status.$day", $db_status) === 'open' ? 'selected' : '' }}>
+                                                        {{ $effective_status === 'open' ? 'selected' : '' }}>
                                                         Open
                                                     </option>
                                                     <option value="closed"
-                                                        {{ old("status.$day", $db_status) === 'closed' ? 'selected' : '' }}>
+                                                        {{ $effective_status === 'closed' ? 'selected' : '' }}>
                                                         Closed
                                                     </option>
                                                 </select>
@@ -570,6 +571,7 @@
                                             </td>
                                         </tr>
                                     @endforeach
+                                </tbody>
                                 </tbody>
                             </table>
                             @error('opening_hours')
@@ -1301,6 +1303,18 @@
                     console.warn('Address wiring error', e);
                 }
 
+                /* ---------- Phone Number Input Filtering ---------- */
+                const phoneInputEl = safeQuery('phone_number');
+                if (phoneInputEl) {
+                    phoneInputEl.addEventListener('keypress', function(e) {
+                        var charCode = (e.which) ? e.which : e.keyCode;
+                        // Allow control keys (like backspace, tab - charCode < 32)
+                        // and allow numbers (48-57)
+                        if (charCode > 31 && (charCode < 48 || charCode > 57)) {
+                            e.preventDefault(); // Prevent non-numeric keys
+                        }
+                    });
+                }
 
                 /* ---------- Multistep Form Navigation & State ---------- */
                 function setInitialStepState() {
@@ -1354,11 +1368,49 @@
                 }
 
 
+                /* ---------- Opening Hours Logic ---------- */
+                try {
+                    // Function to toggle time inputs based on status
+                    function toggleTimeInputs(statusSelect) {
+                        const isClosed = statusSelect.value === 'closed';
+                        // Find the parent <tr>
+                        const row = statusSelect.closest('tr');
+                        if (!row) return;
+
+                        // Find the time inputs within that row
+                        const timeInputs = row.querySelectorAll('input[type="time"]');
+
+                        timeInputs.forEach(input => {
+                            input.disabled = isClosed;
+                            if (isClosed) {
+                                input.value = ''; // Clear value if closed
+                            }
+                        });
+                    }
+
+                    // Find all status dropdowns
+                    const allStatusSelects = document.querySelectorAll('select[name^="status["]');
+
+                    allStatusSelects.forEach(select => {
+                        // 1. Add change event listener to react to user clicks
+                        select.addEventListener('change', () => {
+                            toggleTimeInputs(select);
+                        });
+
+                        // 2. Run on page load (This is now handled by the Blade logic, so no JS call is needed here)
+                        //    The Blade logic sets the correct initial state.
+                    });
+
+                } catch (e) {
+                    console.warn('Opening hours script error', e);
+                }
+
                 /* ---------- Validation Functions ---------- */
                 function validateStep1() {
                     removeErrors('#step1');
                     let ok = true;
-                    // Check required fields in step 1
+
+                    // existing required check
                     ['fullname', 'phone_number', 'business_name', 'business_type', 'business_description',
                         'region_hidden', 'province_hidden', 'city_hidden', 'barangay_select', 'street_name',
                         'postal_code'
@@ -1366,16 +1418,36 @@
                         const el = safeQuery(id);
                         if (!el || !String(el.value || '').trim()) {
                             ok = false;
-                            // Find the *visible* element to apply the class to
                             let visibleEl = el;
-                            if (id.includes('_hidden')) {
-                                visibleEl = safeQuery(id.replace('_hidden', '_select'));
-                            }
+                            if (id.includes('_hidden')) visibleEl = safeQuery(id.replace('_hidden',
+                                '_select'));
                             visibleEl?.classList.add('is-invalid');
                             visibleEl?.closest('.input-group')?.classList.add('is-invalid');
                         }
                     });
-                    // Check opening hours consistency
+
+                    /* --- PHONE NUMBER VALIDATION ADDITION --- */
+                    const phoneInput = safeQuery('phone_number');
+                    if (phoneInput) {
+                        const phoneVal = phoneInput.value.trim();
+                        const pattern = /^09\d{9}$/; // 11-digit format: starts with 09
+                        phoneInput.value = phoneVal.replace(/\D/g, ''); // enforce numerics only
+                        if (!pattern.test(phoneInput.value)) {
+                            ok = false;
+                            phoneInput.classList.add('is-invalid');
+                            if (!phoneInput.closest('.col-md-6')?.querySelector('.error-message')) {
+                                const err = document.createElement('div');
+                                err.className = 'error-message';
+                                err.textContent = 'Phone number must start with 09 and contain 11 digits only.';
+                                // insert AFTER the entire input-group’s parent column
+                                const container = phoneInput.closest('.col-md-6');
+                                container.appendChild(err);
+                            }
+                        }
+                    }
+                    /* --- END PHONE NUMBER VALIDATION --- */
+
+                    // existing Opening Hours validation continues…
                     let hasOpenDay = false;
                     let openDayValid = true;
                     ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].forEach(
@@ -1392,10 +1464,19 @@
                                 }
                             }
                         });
+
+                    /* --- OPENING HOURS REQUIREMENT ADDITION --- */
+                    if (!hasOpenDay) {
+                        ok = false;
+                        toastr.error('Please set at least one day as Open before proceeding.');
+                    }
+                    /* --- END OPENING HOURS ADDITION --- */
+
                     if (hasOpenDay && !openDayValid) {
                         ok = false;
                         toastr.error('Provide open/close times for days marked Open.');
                     }
+
                     if (!ok && !toastr.active) toastr.error(
                         'Please fill required fields in Business Information.');
                     return ok;
@@ -1691,8 +1772,10 @@
 
                 function initPaymentChoices(nativeSelect) {
                     if (!nativeSelect) return;
+
+                    let choices;
                     try {
-                        const choices = new Choices(nativeSelect, {
+                        choices = new Choices(nativeSelect, {
                             removeItemButton: true,
                             searchEnabled: true,
                             placeholder: true,
@@ -1706,18 +1789,24 @@
                         window._PAYMENT_CHOICES_INSTANCE = null; // Fallback if Choices fails
                     }
 
+                    // Move this *after* Choices initialization, since `.choices__placeholder` is only created then
+                    const placeholderInit = document.querySelector('.choices__placeholder');
+                    if (placeholderInit && choices.getValue(true).length > 0) {
+                        placeholderInit.style.display = 'none';
+                    }
+
                     const changeTarget = window._PAYMENT_CHOICES_INSTANCE?.passedElement?.element ||
                         nativeSelect; // Use native select if Choices failed
 
                     changeTarget.addEventListener('change', () => {
                         try {
-                            const selected = window._PAYMENT_CHOICES_INSTANCE ? window
-                                ._PAYMENT_CHOICES_INSTANCE.getValue(true) : Array.from(nativeSelect
-                                    .selectedOptions || []).map(o => o.value);
-                            // Add new rows
+                            const selected = window._PAYMENT_CHOICES_INSTANCE ?
+                                window._PAYMENT_CHOICES_INSTANCE.getValue(true) :
+                                Array.from(nativeSelect.selectedOptions || []).map(o => o.value);
+
+                            // Add new rows for selected payment methods
                             selected.forEach(id => {
                                 const methodName = paymentMethodMap[id] || 'Unknown Method';
-                                // Preserve existing input values if the row is re-added
                                 const existingAccNum = qs(`input[name="account_number[${id}]"]`)
                                     ?.value || '';
                                 const existingAccName = qs(`input[name="account_name[${id}]"]`)
@@ -1725,6 +1814,7 @@
                                 createPaymentDetailRow(id, methodName, existingAccNum,
                                     existingAccName);
                             });
+
                             // Remove deselected rows
                             document.querySelectorAll('#payment_details_container .payment-detail-row')
                                 .forEach(row => {
@@ -1732,7 +1822,7 @@
                                     if (!selected.includes(mid)) row.remove();
                                 });
 
-                            // Clear validation on change for the main select
+                            // Clear validation if user selected/deselected
                             const paySelectWrapper = qs('.choices[data-type="select-multiple"]') ||
                                 nativeSelect;
                             paySelectWrapper.classList.remove('is-invalid');
@@ -1741,31 +1831,36 @@
                         } catch (err) {
                             console.warn('payment change handler error', err);
                         }
+
+                        // Hide the placeholder when items are present
+                        const placeholder = document.querySelector('.choices__placeholder');
+                        const hasSelection = window._PAYMENT_CHOICES_INSTANCE?.getValue(true)?.length >
+                            0;
+                        if (placeholder) placeholder.style.display = hasSelection ? 'none' : '';
                     });
 
-                    // Initial rendering of details for pre-selected options (e.g., from old input or db)
-                    const initiallySelected = window._PAYMENT_CHOICES_INSTANCE ? window
-                        ._PAYMENT_CHOICES_INSTANCE.getValue(true) : Array.from(nativeSelect.selectedOptions ||
-                        []).map(o => o.value);
+                    // Initial rendering of details for pre-selected options
+                    const initiallySelected = window._PAYMENT_CHOICES_INSTANCE ?
+                        window._PAYMENT_CHOICES_INSTANCE.getValue(true) :
+                        Array.from(nativeSelect.selectedOptions || []).map(o => o.value);
                     initiallySelected.forEach(id => {
-                        // Get values potentially already rendered by Blade's old() helper
                         const initialAccNum = qs(`input[name="account_number[${id}]"]`)?.value || '';
                         const initialAccName = qs(`input[name="account_name[${id}]"]`)?.value || '';
                         const methodName = paymentMethodMap[id] || 'Unknown Method';
                         createPaymentDetailRow(id, methodName, initialAccNum, initialAccName);
                     });
 
-                    // Ensure remove buttons added by Blade's old() helper work
+                    // Keep remove buttons functional
                     document.querySelectorAll('#payment_details_container .remove-payment-detail').forEach(
                         btn => {
-                            if (!btn.listenerAttached) { // Avoid attaching multiple listeners
+                            if (!btn.listenerAttached) {
                                 btn.addEventListener('click', () => {
                                     const row = btn.closest('.payment-detail-row');
                                     const mid = row?.getAttribute('data-method-id');
                                     if (mid) safeDeselectPayment(mid);
                                     row?.remove();
                                 });
-                                btn.listenerAttached = true; // Mark as attached
+                                btn.listenerAttached = true;
                             }
                         });
                 }
@@ -1781,10 +1876,7 @@
                     if (!fileInput || !displayInput) return;
 
                     zone.addEventListener('click', (e) => {
-                        // Prevent click if clicking on the preview image itself (optional)
-                        // if (e.target.tagName === 'IMG') return;
-                        if (inputId === 'valid_id_input') window.showValidIdModal(e);
-                        else fileInput.click();
+                        fileInput.click();
                     });
 
                     fileInput.addEventListener('change', () => {
@@ -1888,8 +1980,7 @@
 
                 document.querySelectorAll('.import-btn').forEach(b => b.addEventListener('click', () => {
                     const inputId = b.dataset.input;
-                    if (inputId === 'valid_id_input') window.showValidIdModal();
-                    else safeQuery(inputId)?.click();
+                    safeQuery(inputId)?.click();
                 }));
 
                 // PASTE THIS NEW COMBINED LISTENER
@@ -1950,7 +2041,7 @@
                         validIdTypeError.classList.add('d-none'); // Hide error initially
                         validIdModal.show();
                     };
-                    confirmValidIdTypeBtn?.addEventListener('click', () => {
+                    /* confirmValidIdTypeBtn?.addEventListener('click', () => {
                         if (!validIdTypeSelect.value) {
                             validIdTypeError.classList.remove(
                                 'd-none'); // Show error if no type selected
@@ -1960,7 +2051,7 @@
                             safeQuery('valid_id_input')
                                 .click(); // Trigger file input click after type confirmation
                         }
-                    });
+                    }); */
                     // Reset selection in modal if closed without confirming
                     validIdModalElement.addEventListener('hidden.bs.modal', function() {
                         if (!validIdTypeHidden.value) validIdTypeSelect.value =
@@ -2103,7 +2194,6 @@
                         updateValidIdTypeDisplay(); // update visible element immediately
                         validIdModal.hide();
                         // Trigger file input click after type confirmation
-                        safeQuery('valid_id_input')?.click();
                     }
                 });
 
