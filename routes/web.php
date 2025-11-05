@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\Auth\Events\Verified;
 
+use App\Http\Controllers\Notifications\NotificationController;
+
 // === Models ===
 use App\Models\User;
 
@@ -192,7 +194,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     //Messages
     Route::get('/customer/messages', [CustomerMenuController::class, 'messages'])->name('customer.messages');
-    Route::get('/messages/show/{business_id}/{vendor_user_id}', [CustomerMenuController::class, 'getMessageThread'])->name('customer.messages.show');
+    Route::get('/customer/messages/thread/{business_id}', [CustomerMenuController::class, 'getMessageThread'])->name('customer.messages.thread');
     Route::post('/messages/send', [CustomerMenuController::class, 'sendMessage'])->name('customer.messages.send');
 
     // Profile
@@ -275,6 +277,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
   Route::get('/payment/callback/success', [PaymentController::class, 'singlePaymentSuccess'])->name('payment.callback.success');
   Route::get('/payment/callback/failed/{draft_id?}', [PaymentController::class, 'singlePaymentFailed'])->name('payment.callback.failed');
 });
+
+
+// routes/web.php
+Route::middleware('auth')->group(function () {
+  // returns paginated notifications (uses NotificationController@index)
+  Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+
+  // returns { unread: N } (NotificationController@unreadCount)
+  Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread_count');
+
+  // mark single notification read
+  Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.mark_read');
+
+  // mark all read
+  Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.mark_all_read');
+});
+
 
 // ====================================================================
 // === PAYMONGO WEBHOOK ==============================================
@@ -366,3 +385,15 @@ Route::get('/reset-password/{token}', [NewPasswordController::class, 'create'])
 // Handle password reset
 Route::post('/reset-password', [NewPasswordController::class, 'store'])
   ->middleware('guest')->name('password.update');
+
+
+Route::get('/test-vendor/{businessId}', function ($businessId) {
+  $vendorId = App\Models\BusinessDetail::find($businessId)->vendor_id;
+  $userId = App\Models\Vendor::find($vendorId)->user_id;
+
+  return response()->json([
+    'vendor_id' => $vendorId,
+    'userId' => $userId,
+    'business_found' => $vendorId ? true : false
+  ]);
+});

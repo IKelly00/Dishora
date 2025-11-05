@@ -3,20 +3,16 @@
 namespace App\Http\Controllers\customer;
 
 use App\Http\Controllers\Controller;
-use App\Models\{BusinessDetail, Customer, PaymentMethod, ProductCategory, Vendor, Product, Message};
+use App\Models\{BusinessDetail, Customer, PaymentMethod, ProductCategory, Vendor, Product, Message, User};
 use App\Services\VendorLocatorService;
-use Illuminate\Support\Facades\{Auth, Log};
+use Illuminate\Support\Facades\{Auth, Log, DB};
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use App\Events\MessageSent;
-use Illuminate\Support\Str;
 
 class CustomerMenuController extends Controller
 {
-  const BIZ_PREFIX = '[BIZ_ID::';
-  const BIZ_SUFFIX = ']';
-
   public function __construct(protected VendorLocatorService $locator) {}
 
   private function getVendor(): ?Vendor
@@ -26,6 +22,7 @@ class CustomerMenuController extends Controller
 
   private function resolveBusinessContext(Vendor $vendor): array
   {
+    // ... existing code ...
     $vendorStatus = $vendor->registration_status ?? null;
 
     $activeBusinessId = session('active_business_id');
@@ -46,7 +43,6 @@ class CustomerMenuController extends Controller
     $businessStatus = $business?->verification_status ?? 'Unknown';
     $showVerificationModal = $businessStatus === 'Pending';
 
-    // Reset the flag only if vendorStatus transitioned back to "Pending"
     if ($vendorStatus === 'Pending' && session('last_vendor_status') !== 'Pending') {
       session(['vendor_status_modal_shown' => false]);
     }
@@ -74,14 +70,15 @@ class CustomerMenuController extends Controller
 
   private function buildViewData(?Vendor $vendor, array $extra = []): array
   {
+    // ... existing code ...
     if (!$vendor) {
       return array_merge([
-        'hasVendorAccess'        => false,
-        'showRolePopup'          => true,
-        'vendorStatus'           => session('vendorStatus', null),
-        'showVendorStatusModal'  => session('vendorStatus') === 'Pending',
+        'hasVendorAccess'       => false,
+        'showRolePopup'         => true,
+        'vendorStatus'          => session('vendorStatus', null),
+        'showVendorStatusModal'   => session('vendorStatus') === 'Pending',
         'showVendorRejectedModal' => session('vendorStatus') === 'Rejected',
-        'hasShownVendorModal'    => session('vendor_status_modal_shown', false),
+        'hasShownVendorModal'     => session('vendor_status_modal_shown', false),
       ], $extra);
     }
 
@@ -94,7 +91,7 @@ class CustomerMenuController extends Controller
 
   public function index()
   {
-    // Check that this is a customer session
+    // ... existing code ...
     if (strtolower(session('active_role', 'customer')) !== 'customer') {
       abort(403, 'Unauthorized action.');
     }
@@ -105,9 +102,7 @@ class CustomerMenuController extends Controller
 
     $vendors = collect();
 
-    // ✅ Only fetch vendors if we have stored customer coordinates
     if ($customer && $customer->latitude && $customer->longitude) {
-      // ... (your existing vendor logic remains the same) ...
       $nearbyVendors = $this->locator->getNearbyVendors(
         $customer->customer_id,
         $customer->latitude,
@@ -116,43 +111,27 @@ class CustomerMenuController extends Controller
       $vendors = $this->filterVendorsWithProducts($nearbyVendors);
     }
 
-    // Product categories (still needed for $deals)
     $categories = ProductCategory::all();
 
-    // --- START OF CHANGES ---
-
-    // All available products (initial load, for "All categories" view)
-    // OLD QUERY:
-    // $products   = Product::with(['category', 'dietarySpecifications'])
-    //   ->where('is_available', true)
-    //   ->get();
-
-    // NEW QUERY: Get products from customer's past orders
     $userId = $user->user_id;
     $pastOrderProducts = Product::with(['category', 'dietarySpecifications', 'business'])
-      ->where('is_available', true) // Only show products they *can* order again
+      ->where('is_available', true)
       ->whereHas('orderItems.order', function ($query) use ($userId) {
-        // Check for products in orders that belong to this user
         $query->where('user_id', $userId);
       })
-      ->distinct() // Get each product only once
+      ->distinct()
       ->get();
 
-    // Your "deals" (currently set as ProductCategory, maybe rename later)
     $deals = ProductCategory::all();
 
-    // Merge vendor-related view meta/context info
-    // Pass 'pastOrderProducts' instead of 'products'
     $viewData = $this->buildViewData($vendor, compact('vendors', 'categories', 'pastOrderProducts', 'deals'));
 
-    // --- END OF CHANGES ---
-
-    // Return the dashboard
     return view('content.customer.customer-dashboard', $viewData);
   }
 
   public function filterVendorsWithProducts($nearbyVendors)
   {
+    // ... existing code ...
     $businessIds = $nearbyVendors->pluck('business_id');
 
     return BusinessDetail::with(['products' => function ($q) {
@@ -174,7 +153,6 @@ class CustomerMenuController extends Controller
           $business->phone_number = $vendorRow->phone_number;
           $business->verification_status = $vendorRow->verification_status ?? null;
 
-          // Encrypt IDs for links
           $business->encrypted_business_id = Crypt::encryptString($business->business_id);
           $business->encrypted_vendor_id = Crypt::encryptString($business->vendor_id);
         }
@@ -186,6 +164,7 @@ class CustomerMenuController extends Controller
 
   public function getProductsByCategory(Request $request)
   {
+    // ... existing code ...
     $categoryId = $request->get('category_id');
 
     $productsQuery = Product::with(['category', 'dietarySpecifications'])
@@ -205,6 +184,7 @@ class CustomerMenuController extends Controller
 
   public function customerStartSelling()
   {
+    // ... existing code ...
     Log::info('CustomerMenuController customerStartSelling');
 
     $user = Auth::user();
@@ -222,6 +202,7 @@ class CustomerMenuController extends Controller
 
   public function selectedBusiness($businessId, $vendorId)
   {
+    // ... existing code ...
     try {
       $businessId = Crypt::decryptString($businessId);
       $vendorId   = Crypt::decryptString($vendorId);
@@ -229,7 +210,6 @@ class CustomerMenuController extends Controller
       abort(404, 'Invalid ID');
     }
 
-    // Load business with ALL its products (no availability filter)
     $business = BusinessDetail::with('products', 'vendor.user')
       ->where('business_id', $businessId)
       ->where('vendor_id', $vendorId)
@@ -239,7 +219,6 @@ class CustomerMenuController extends Controller
       abort(404, 'Business not found or does not belong to the vendor.');
     }
 
-    // If the business has zero products, abort
     if ($business->products->isEmpty()) {
       abort(404, 'This business currently has no products set up.');
     }
@@ -257,9 +236,10 @@ class CustomerMenuController extends Controller
 
   public function vendors()
   {
-    $vendors = BusinessDetail::with('products') // eager load products
+    // ... existing code ...
+    $vendors = BusinessDetail::with('products')
       ->where('verification_status', 'Approved')
-      ->whereHas('products') // only include businesses that actually have products
+      ->whereHas('products')
       ->get();
 
     $vendor = $this->getVendor();
@@ -270,6 +250,7 @@ class CustomerMenuController extends Controller
 
   public function dismissStatusModal(Request $request)
   {
+    // ... existing code ...
     session(['vendor_status_modal_shown' => true]);
     return response()->json(['success' => true]);
   }
@@ -279,145 +260,88 @@ class CustomerMenuController extends Controller
    */
   public function messages()
   {
+    // --- START: UPDATED LOGIC ---
     $customerId = Auth::id();
-    Log::info('Customer messages: Fetching conversations for user', ['customer_id' => $customerId]);
+    Log::info('[Customer messages] Fetching conversations', ['customer_id' => $customerId]);
 
-    // 1. Get all messages involving the customer
-    $messages = Message::where('sender_id', $customerId)
-      ->orWhere('receiver_id', $customerId)
-      ->select('message_id', 'message_text', 'sender_id', 'receiver_id', 'sent_at', 'is_read') // Select all needed columns
+    $messages = Message::where(function ($query) use ($customerId) {
+      $query->where('sender_id', $customerId)
+        ->where('sender_role', 'customer');
+    })->orWhere(function ($query) use ($customerId) {
+      $query->where('receiver_id', $customerId)
+        ->where('receiver_role', 'customer');
+    })
       ->orderBy('sent_at', 'desc')
       ->get();
 
-    // 2. Extract potential conversations: unique pairs of (business_id, vendor_user_id)
-    $potentialConversations = new Collection(); // Use a Collection for easier handling
-
-    foreach ($messages as $message) {
-      if (Str::startsWith($message->message_text, self::BIZ_PREFIX)) {
-        $businessId = Str::between($message->message_text, self::BIZ_PREFIX, self::BIZ_SUFFIX);
-
-        if (is_numeric($businessId)) {
-          $businessId = (int)$businessId;
-          // Determine the "other party" (potential vendor user ID)
-          $otherPartyUserId = ($message->sender_id == $customerId) ? $message->receiver_id : $message->sender_id;
-
-          // Store unique key: business_id -> vendor_user_id
-          // Using business_id as key ensures we only check each business once
-          if (!$potentialConversations->has($businessId)) {
-            $potentialConversations->put($businessId, $otherPartyUserId);
-          }
-        }
+    $conversationsByBusinessId = $messages->groupBy(function ($message) use ($customerId) {
+      if ($message->sender_id == $customerId && $message->sender_role == 'customer') {
+        return $message->receiver_id;
       }
-    }
+      return $message->sender_id;
+    });
 
-    Log::debug('Customer messages: Found potential conversations (BusinessID => OtherPartyUserID)', ['pairs' => $potentialConversations->toArray()]);
-
-    if ($potentialConversations->isEmpty()) {
-      Log::info('Customer messages: No valid message prefixes found, returning empty view.');
+    if ($conversationsByBusinessId->isEmpty()) {
+      Log::info('[Customer messages] No conversations found.');
       return view('content.customer.customer-messages', ['conversations' => collect()]);
     }
 
-    // 3. Fetch the BusinessDetail models AND verify the vendor association
-    $validBusinessIds = $potentialConversations->keys()->toArray();
+    $businessDetails = BusinessDetail::whereIn('business_id', $conversationsByBusinessId->keys())->get();
 
-    // Fetch businesses and eager load vendor.user only for potentially valid conversations
-    $businessDetails = BusinessDetail::whereIn('business_id', $validBusinessIds)
-      ->with(['vendor.user:user_id,fullname']) // Eager load vendor and their user details
-      ->get()
-      // Filter: Keep only businesses where the vendor's user_id matches the 'otherPartyUserId' we found
-      ->filter(function ($business) use ($potentialConversations) {
-        // Check if vendor and user relationships loaded correctly AND
-        // if the associated vendor's user_id matches the ID stored in our potential conversations map
-        return $business->vendor
-          && $business->vendor->user
-          && $business->vendor->user->user_id == $potentialConversations->get($business->business_id);
-      });
+    $conversations = $businessDetails->map(function ($business) use ($conversationsByBusinessId, $customerId) {
 
-    Log::debug('Customer messages: Verified BusinessDetail records after vendor check', ['count' => $businessDetails->count(), 'ids' => $businessDetails->pluck('business_id')->toArray()]);
+      $businessMessages = $conversationsByBusinessId->get($business->business_id);
+      $lastMessage = $businessMessages->first();
 
-    if ($businessDetails->isEmpty()) {
-      Log::info('Customer messages: No conversations matched valid vendor association.');
-      return view('content.customer.customer-messages', ['conversations' => collect()]);
-    }
+      $business->unread_count = $businessMessages
+        ->where('receiver_id', $customerId)
+        ->where('receiver_role', 'customer')
+        ->where('is_read', false)
+        ->count();
 
-    // 4. Add last message preview and unread count for the VERIFIED conversations
-    foreach ($businessDetails as $convo) {
-      // We already confirmed vendor.user exists in the filter step
-      $vendorUserId = $convo->vendor->user_id;
-      $prefix = self::BIZ_PREFIX . $convo->business_id . self::BIZ_SUFFIX;
+      $business->last_message = $lastMessage;
+      $business->latest_message_time = $lastMessage?->sent_at;
+      $business->business_image_url = $business->business_image ? secure_asset($business->business_image) : secure_asset('images/no-image.jpg');
 
-      // Find the latest message *for this specific business prefix* between customer and verified vendor user
-      // We can reuse the $messages collection fetched earlier for efficiency, filtering it here.
-      $lastMessage = $messages->filter(function ($msg) use ($prefix, $vendorUserId, $customerId) {
-        // Check if message has the right prefix
-        if (!Str::startsWith($msg->message_text, $prefix)) return false;
-        // Check if it's between the customer and the correct vendor
-        return ($msg->sender_id == $customerId && $msg->receiver_id == $vendorUserId)
-          || ($msg->sender_id == $vendorUserId && $msg->receiver_id == $customerId);
-      })->first(); // Since $messages was sorted desc, the first match is the latest
+      return $business;
+    })->sortByDesc('latest_message_time');
 
-      if ($lastMessage) {
-        $convo->last_message_preview = Str::after($lastMessage->message_text, self::BIZ_SUFFIX);
-        $convo->latest_message_time = $lastMessage->sent_at; // Store time for sorting
-      } else {
-        // This case should ideally not happen if we found the business based on messages, but good for safety
-        $convo->last_message_preview = 'No messages found for this context.';
-        $convo->latest_message_time = null;
-      }
+    // We also need to pass the vendor view data for the header/layout
+    $vendor = $this->getVendor();
+    $viewData = $this->buildViewData($vendor, ['conversations' => $conversations]);
 
-      // Count unread messages (sent BY VENDOR, TO CUSTOMER, for THIS BUSINESS) using the filtered messages collection
-      $convo->unread_count = $messages->filter(function ($msg) use ($prefix, $vendorUserId, $customerId) {
-        return $msg->sender_id == $vendorUserId // Sent by vendor
-          && $msg->receiver_id == $customerId // To customer
-          && !$msg->is_read                   // Is unread
-          && Str::startsWith($msg->message_text, $prefix); // Has correct prefix
-      })->count();
-
-
-      // Add necessary IDs and image URL for the view's data attributes
-      $convo->vendor_user_id = $vendorUserId; // Pass the verified vendor user ID
-      $convo->business_image_url = $convo->business_image ? secure_asset($convo->business_image) : secure_asset('images/no-image.jpg');
-    }
-
-    // Sort verified conversations by the latest message time, descending
-    $sortedConversations = $businessDetails->sortByDesc('latest_message_time');
-
-    Log::info('Customer messages: Prepared verified conversations for view', ['count' => $sortedConversations->count()]);
-
-    // 5. Return the view with the sorted conversation data
-    return view('content.customer.customer-messages', [
-      'conversations' => $sortedConversations
-    ]);
+    return view('content.customer.customer-messages', $viewData);
+    // --- END: UPDATED LOGIC ---
   }
 
   /**
    * [AJAX] Fetch a specific message thread for a business.
    */
-  public function getMessageThread($business_id, $vendor_user_id)
+  public function getMessageThread($business_id)
   {
+    // --- START: UPDATED LOGIC ---
     $customerId = Auth::id();
-    $prefix = self::BIZ_PREFIX . $business_id . self::BIZ_SUFFIX;
+    Log::debug('[Customer getMessageThread]', ['business_id' => $business_id, 'customer_id' => $customerId]);
 
-    // 1. Fetch all messages between the customer and the vendor
-    $allMessages = Message::where(function ($query) use ($customerId, $vendor_user_id) {
+    $messages = Message::where(function ($query) use ($customerId, $business_id) {
       $query->where('sender_id', $customerId)
-        ->where('receiver_id', $vendor_user_id);
-    })->orWhere(function ($query) use ($customerId, $vendor_user_id) {
-      $query->where('sender_id', $vendor_user_id)
-        ->where('receiver_id', $customerId);
+        ->where('sender_role', 'customer')
+        ->where('receiver_id', $business_id)
+        ->where('receiver_role', 'business');
+    })->orWhere(function ($query) use ($customerId, $business_id) {
+      $query->where('sender_id', $business_id)
+        ->where('sender_role', 'business')
+        ->where('receiver_id', $customerId)
+        ->where('receiver_role', 'customer');
     })
-      ->with('sender:user_id,fullname') // 'fullname' matches your user schema
       ->orderBy('sent_at', 'asc')
       ->get();
 
-    // 2. Filter in PHP to get only messages for this business
-    $filteredMessages = $allMessages->filter(function ($message) use ($prefix) {
-      return str_starts_with($message->message_text, $prefix);
-    });
+    Log::debug('[Customer getMessageThread] Found messages', ['count' => $messages->count()]);
 
-    // 3. Mark messages as read (only those sent *to* the customer)
-    $messageIdsToMarkAsRead = $filteredMessages
+    $messageIdsToMarkAsRead = $messages
       ->where('receiver_id', $customerId)
+      ->where('receiver_role', 'customer')
       ->where('is_read', false)
       ->pluck('message_id');
 
@@ -425,15 +349,22 @@ class CustomerMenuController extends Controller
       Message::whereIn('message_id', $messageIdsToMarkAsRead)->update(['is_read' => true]);
     }
 
-    // 4. Clean the prefix from the text before returning
-    $cleanedMessages = new Collection();
-    foreach ($filteredMessages as $message) {
-      // Remove the prefix
-      $message->message_text = str_replace($prefix, '', $message->message_text);
-      $cleanedMessages->push($message);
-    }
+    // --- MANUALLY ADD SENDER INFO ---
+    $customer = User::find($customerId);
+    $business = BusinessDetail::find($business_id);
 
-    return response()->json($cleanedMessages->values());
+    $messages->map(function ($message) use ($customer, $business) {
+      if ($message->sender_role == 'customer') {
+        $message->sender = $customer;
+      } else {
+        $message->sender = $business;
+      }
+      return $message;
+    });
+    // --- END MANUAL ADD ---
+
+    return response()->json($messages->values());
+    // --- END: UPDATED LOGIC ---
   }
 
   /**
@@ -441,36 +372,35 @@ class CustomerMenuController extends Controller
    */
   public function sendMessage(Request $request)
   {
+    // --- START: UPDATED LOGIC ---
+    Log::debug('[Customer sendMessage]', $request->all());
     $request->validate([
-      'receiver_id' => 'required|exists:users,user_id',
       'business_id' => 'required|exists:business_details,business_id',
       'message_text' => 'required|string|max:1000',
     ]);
 
-    $prefixedMessage = self::BIZ_PREFIX . $request->business_id . self::BIZ_SUFFIX . $request->message_text;
+    $customerId = Auth::id();
 
-    // Create the message WITH the prefix
     $message = Message::create([
-      'sender_id' => Auth::id(),
-      'receiver_id' => $request->receiver_id,
-      'message_text' => $prefixedMessage, // Save prefixed message
+      'sender_id' => $customerId,
+      'sender_role' => 'customer',
+      'receiver_id' => $request->business_id,
+      'receiver_role' => 'business',
+      'message_text' => $request->message_text,
       'sent_at' => now(),
       'is_read' => false,
     ]);
+    Log::debug('[Customer sendMessage] Message created', ['id' => $message->message_id]);
 
-    // --- Broadcasting ---
-    // Create a copy of the message specifically for broadcasting
-    // The event constructor will handle loading sender and cleaning text
-    $messageForBroadcast = $message->replicate(); // Use replicate or fresh query if needed
-    $messageForBroadcast->message_text = $prefixedMessage; // Ensure event gets original text
-    broadcast(new MessageSent($messageForBroadcast))->toOthers(); // Use toOthers()
-    Log::debug('Customer sent message, event dispatched.'); // Log dispatch
+    broadcast(new MessageSent($message))->toOthers();
+    Log::debug('Customer sent message, event dispatched.');
 
-    // --- Prepare AJAX Response ---
-    // Clean the message text for the *AJAX* response
-    $message->message_text = $request->message_text; // Use original, clean text
-    $message->load('sender:user_id,fullname'); // Ensure sender is loaded for AJAX
+    // --- MANUALLY ADD SENDER FOR AJAX RESPONSE ---
+    $customer = User::find($customerId);
+    $message->sender = $customer;
+    // --- END MANUAL ADD ---
 
     return response()->json($message, 201);
+    // --- END: UPDATED LOGIC ---
   }
 }

@@ -5,14 +5,12 @@ namespace App\Http\Controllers\vendor;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\{Auth, Log, DB};
 use Illuminate\Http\Request;
-use App\Models\{Product, ProductCategory, DietarySpecification, Vendor, Message, User, PaymentDetail, OrderItem, Review};
+use App\Models\{Product, ProductCategory, DietarySpecification, Vendor, Message, User, PaymentDetail, OrderItem, Review, BusinessDetail};
 use Illuminate\Support\Collection;
 use App\Events\MessageSent;
 
 class VendorMenuController extends Controller
 {
-  const BIZ_PREFIX = '[BIZ_ID::';
-  const BIZ_SUFFIX = ']';
 
   private function getVendor()
   {
@@ -105,30 +103,22 @@ class VendorMenuController extends Controller
     }
 
     // --- 2. Fetch Dashboard Stats ---
-
-    // --- (FIXED) Total Revenue ---
-    // This now sums all "Paid" transactions from payment_details
-    // linked to orders from this business.
     $totalRevenue = PaymentDetail::where('payment_status', 'Paid')
       ->whereHas('order', function ($query) use ($activeBusinessId) {
         $query->where('business_id', $activeBusinessId);
       })
       ->sum('amount_paid');
 
-    // --- New Orders ---
     $newOrdersCount = OrderItem::whereHas('order', function ($query) use ($activeBusinessId) {
       $query->where('business_id', $activeBusinessId);
     })->where('order_item_status', 'Pending')->count();
 
-    // --- Active Products ---
     $activeProductsCount = Product::where('business_id', $activeBusinessId)
       ->where('is_available', 1)
       ->count();
 
-    // --- Average Rating ---
     $averageRating = Review::where('business_id', $activeBusinessId)->avg('rating');
 
-    // --- Recent Reviews (or your other widget) ---
     $recentReviews = Review::with('customer')
       ->where('business_id', $activeBusinessId)
       ->orderBy('created_at', 'desc')
@@ -143,7 +133,7 @@ class VendorMenuController extends Controller
       'newOrdersCount' => $newOrdersCount,
       'activeProductsCount' => $activeProductsCount,
       'averageRating' => number_format($averageRating, 1),
-      'recentReviews' => $recentReviews, // Or 'topSellingProducts'
+      'recentReviews' => $recentReviews,
     ];
 
     return view('content.vendor.vendor-dashboard', array_merge($viewData, $data));
@@ -205,7 +195,6 @@ class VendorMenuController extends Controller
     $cutoffHours = 0;
     $cutoffMinutes = 0;
 
-    // Calculate hours and minutes if a cutoff time is set
     if (!is_null($product->cutoff_minutes)) {
       $cutoffHours = floor($product->cutoff_minutes / 60);
       $cutoffMinutes = $product->cutoff_minutes % 60;
@@ -255,142 +244,149 @@ class VendorMenuController extends Controller
    */
   public function messages()
   {
-    Log::info('VendorMenuController messages'); // 🪵 Log entry point
+    Log::info('VendorMenuController messages');
 
-    $vendor = $this->getVendor();
+    // --- 1. Get the Vendor ---
+    $vendorUserId = Auth::id();
+    if (!$vendorUserId) {
+      Log::warning('Vendor messages: No authenticated user.');
+      return redirect()->route('login')->withErrors('Please log in.');
+    }
+    $vendor = Vendor::where('user_id', $vendorUserId)->first();
+    if (!$vendor) {
+      Log::warning('Vendor messages: No vendor record for user.', ['user_id' => $vendorUserId]);
+      return redirect()->route('vendor.dashboard')->withErrors('Vendor account not found.');
+    }
+
+    // --- 2. Get the base data from buildViewData ---
+    // This sets up session, activeBusinessId, etc.
     $data = $this->buildViewData($vendor);
 
-    // Get the active business to display its name
-    $business = $vendor->businessDetails()
-      ->where('business_id', $data['activeBusinessId'])
-      ->first();
-    $data['businessName'] = $business?->business_name ?? 'Your Business'; // Pass name to view
-
-    // Redirect if no business is active or accessible
+    // --- 3. Check access ---
     if (!$data['hasVendorAccess'] || !$data['activeBusinessId']) {
-      Log::warning('Vendor messages: No active business or access denied.'); // 🪵 Log redirect reason
+      Log::warning('Vendor messages: No active business or access denied.');
       return redirect()->route('vendor.dashboard')->withErrors('No active business selected.');
     }
 
-    $vendorUserId = $vendor->user_id;
+    // --- 4. Get data needed for this view ---
     $activeBusinessId = $data['activeBusinessId'];
 
-    // Define the prefix, escaping the '[' for SQL Server LIKE
-    $prefixString = self::BIZ_PREFIX . $activeBusinessId . self::BIZ_SUFFIX;
-    $prefixForLike = str_replace('[', '[[]', self::BIZ_PREFIX) . $activeBusinessId . self::BIZ_SUFFIX . '%'; // Escape '[' and add '%'
-
     // --- Start: Get Customer IDs ---
-
-    // 1. Get all relevant message participants for this business using the escaped prefix
     $participants = DB::table('messages')
-      ->where(function ($query) use ($vendorUserId) {
-        $query->where('sender_id', $vendorUserId)
-          ->orWhere('receiver_id', $vendorUserId);
+      ->where(function ($query) use ($activeBusinessId) {
+        $query->where('sender_id', $activeBusinessId)
+          ->where('sender_role', 'business');
+      })->orWhere(function ($query) use ($activeBusinessId) {
+        $query->where('receiver_id', $activeBusinessId)
+          ->where('receiver_role', 'business');
       })
-      ->where('message_text', 'LIKE', $prefixForLike) // Use the escaped prefix + wildcard
       ->select('sender_id', 'receiver_id')
       ->get();
 
-    // 2. Process in PHP: Get unique customer IDs, excluding the vendor
     $customerIds = $participants
-      ->pluck('sender_id')
-      ->merge($participants->pluck('receiver_id'))
-      ->unique()
-      ->reject(function ($id) use ($vendorUserId) {
-        return $id == $vendorUserId; // Use loose comparison just in case
+      ->flatMap(function ($participant) use ($activeBusinessId) {
+        if ($participant->sender_id == $activeBusinessId) {
+          return [$participant->receiver_id];
+        }
+        return [$participant->sender_id];
       })
-      ->values(); // Reset array keys
-
+      ->unique()
+      ->values();
+    Log::debug('[messages] Found Customer IDs', ['ids' => $customerIds->toArray()]);
     // --- End: Get Customer IDs ---
 
-    // Now, get the details for each customer and their last message
-    $conversations = User::whereIn('user_id', $customerIds)->get()->map(function ($customer) use ($vendorUserId, $prefixString, $prefixForLike) {
+    $conversations = User::whereIn('user_id', $customerIds)->get()->map(function ($customer) use ($activeBusinessId) {
 
-      // Find the last message in the conversation, using the escaped prefix
-      $lastMessage = Message::where(function ($query) use ($vendorUserId, $customer) {
-        $query->where('sender_id', $vendorUserId)->where('receiver_id', $customer->user_id);
+      $lastMessage = Message::where(function ($query) use ($customer, $activeBusinessId) {
+        $query->where('sender_id', $customer->user_id)
+          ->where('sender_role', 'customer')
+          ->where('receiver_id', $activeBusinessId)
+          ->where('receiver_role', 'business');
+      })->orWhere(function ($query) use ($customer, $activeBusinessId) {
+        $query->where('sender_id', $activeBusinessId)
+          ->where('sender_role', 'business')
+          ->where('receiver_id', $customer->user_id)
+          ->where('receiver_role', 'customer');
       })
-        ->orWhere(function ($query) use ($vendorUserId, $customer) {
-          $query->where('sender_id', $customer->user_id)->where('receiver_id', $vendorUserId);
-        })
-        ->where('message_text', 'LIKE', $prefixForLike) // Use the escaped prefix + wildcard
         ->orderBy('sent_at', 'desc')
         ->first();
 
-      // Clean the message text (use the original, unescaped prefix string for replacement)
-      if ($lastMessage) {
-        $lastMessage->message_text = str_replace($prefixString, '', $lastMessage->message_text);
+      $customer->unread_count = Message::where('sender_id', $customer->user_id)
+        ->where('sender_role', 'customer')
+        ->where('receiver_id', $activeBusinessId)
+        ->where('receiver_role', 'business')
+        ->where('is_read', false)
+        ->count();
 
-        // Check for unread messages (use the escaped prefix for the query)
-        $customer->unread_count = Message::where('sender_id', $customer->user_id) // Messages sent BY the customer
-          ->where('receiver_id', $vendorUserId) // TO the vendor
-          ->where('message_text', 'LIKE', $prefixForLike) // For this business
-          ->where('is_read', false) // That are unread
-          ->count();
-      } else {
-        $customer->unread_count = 0; // No last message means no unread messages
-      }
-
-      $customer->last_message = $lastMessage; // Attach the cleaned last message
-      return $customer; // Return the customer object with added properties
-
-    })->sortByDesc(function ($customer) { // Sort by the timestamp of the last message
+      $customer->last_message = $lastMessage;
+      return $customer;
+    })->sortByDesc(function ($customer) {
       return $customer->last_message?->sent_at;
     });
 
-    // Add the prepared conversations to the data for the view
-    $data['conversations'] = $conversations;
-    $activeBusinessId = $data['activeBusinessId']; // Get the ID from the data array
+    // --- 5. Prepare the final view data ---
 
-    // Debug Logs (Keep temporarily) 🪵
-    Log::debug('Vendor Messages - Vendor User ID:', ['id' => $vendorUserId]);
-    Log::debug('Vendor Messages - Active Business ID:', ['id' => $activeBusinessId]);
-    Log::debug('Vendor Messages - Calculated Prefix (Original):', ['prefix' => $prefixString]);
-    Log::debug('Vendor Messages - Prefix for LIKE Query:', ['prefix_like' => $prefixForLike]);
-    Log::debug('Vendor Messages - Found Participants:', $participants->toArray());
-    Log::debug('Vendor Messages - Found Customer IDs (after reject):', $customerIds->toArray());
-    Log::debug('Vendor Messages - Final Conversations Count:', ['count' => $conversations->count()]);
-    Log::debug('Vendor Messages - Final Conversations Data:', $conversations->toArray());
-    Log::debug('Vendor Messages - Data being passed to view:', $data);
+    // Get the business name (which buildViewData doesn't add to the top level)
+    $business = $vendor->businessDetails()
+      ->where('business_id', $activeBusinessId)
+      ->first();
+    $businessName = $business?->business_name ?? 'Your Business';
 
-    // Return the view with all the necessary data
-    return view('content.vendor.vendor-messages', $data + ['activeBusinessId' => $activeBusinessId]);
+    // This is the data *specific* to this view
+    $viewData = [
+      'conversations' => $conversations,
+      'businessName' => $businessName,
+    ];
+
+    // --- 6. Return the view, merging base data and view-specific data ---
+    // This matches the pattern in your 'index' method
+    return view('content.vendor.vendor-messages', array_merge($viewData, $data));
   }
 
   /**
-   * [AJAX] Fetch a specific message thread for the active business.
+   * [AJAX] Fetch a specific message thread.
    */
   public function getMessageThread(Request $request)
   {
+    Log::debug('[getMessageThread] Request', $request->all());
     $request->validate(['customer_id' => 'required|exists:users,user_id']);
 
-    $vendor = $this->getVendor();
-    $vendorUserId = $vendor->user_id;
+    // --- Start: Inlined Logic ---
+    $vendorUserId = Auth::id();
+    $vendor = $vendorUserId ? Vendor::where('user_id', $vendorUserId)->first() : null;
+    if (!$vendor) {
+      return response()->json(['error' => 'Vendor not found.'], 404);
+    }
+    // Use session to get active business ID, consistent with buildViewData
+    $activeBusinessId = session('active_business_id');
+    // --- End: Inlined Logic ---
+
     $customerId = $request->customer_id;
 
-    $context = $this->resolveBusinessContext($vendor);
-    $prefix = self::BIZ_PREFIX . $context['activeBusinessId'] . self::BIZ_SUFFIX;
+    if (!$activeBusinessId) {
+      return response()->json(['error' => 'No active business selected.'], 400);
+    }
+    Log::debug('[getMessageThread] Context', ['customer_id' => $customerId, 'business_id' => $activeBusinessId]);
 
-    // 1. Fetch all messages between the two users
-    $allMessages = Message::where(function ($query) use ($customerId, $vendorUserId) {
+    $messages = Message::where(function ($query) use ($customerId, $activeBusinessId) {
       $query->where('sender_id', $customerId)
-        ->where('receiver_id', $vendorUserId);
-    })->orWhere(function ($query) use ($customerId, $vendorUserId) {
-      $query->where('sender_id', $vendorUserId)
-        ->where('receiver_id', $customerId);
+        ->where('sender_role', 'customer')
+        ->where('receiver_id', $activeBusinessId)
+        ->where('receiver_role', 'business');
+    })->orWhere(function ($query) use ($customerId, $activeBusinessId) {
+      $query->where('sender_id', $activeBusinessId)
+        ->where('sender_role', 'business')
+        ->where('receiver_id', $customerId)
+        ->where('receiver_role', 'customer');
     })
-      ->with('sender:user_id,fullname') // Use 'fullname' as in your users table
       ->orderBy('sent_at', 'asc')
       ->get();
+    Log::debug('[getMessageThread] Found messages', ['count' => $messages->count()]);
 
-    // 2. Filter in PHP for this business's context
-    $filteredMessages = $allMessages->filter(function ($message) use ($prefix) {
-      return str_starts_with($message->message_text, $prefix);
-    });
-
-    // 3. Mark these messages as read (only those sent *to* the vendor)
-    $messageIdsToMarkAsRead = $filteredMessages
-      ->where('receiver_id', $vendorUserId)
+    // Mark messages as read
+    $messageIdsToMarkAsRead = $messages
+      ->where('receiver_id', $activeBusinessId)
+      ->where('receiver_role', 'business')
       ->where('is_read', false)
       ->pluck('message_id');
 
@@ -398,57 +394,66 @@ class VendorMenuController extends Controller
       Message::whereIn('message_id', $messageIdsToMarkAsRead)->update(['is_read' => true]);
     }
 
-    // 4. Clean the text before returning
-    $cleanedMessages = new Collection();
-    foreach ($filteredMessages as $message) {
-      $message->message_text = str_replace($prefix, '', $message->message_text);
-      $cleanedMessages->push($message);
-    }
+    // --- MANUALLY ADD SENDER INFO ---
+    $customer = User::find($customerId);
+    $business = BusinessDetail::find($activeBusinessId);
 
-    return response()->json($cleanedMessages->values());
+    $messages->map(function ($message) use ($customer, $business) {
+      if ($message->sender_role == 'customer') {
+        $message->sender = $customer;
+      } else {
+        $message->sender = $business;
+      }
+      return $message;
+    });
+    // --- END MANUAL ADD ---
+
+    return response()->json($messages->values());
   }
 
   /**
-   * [AJAX] Send a reply from the vendor to a customer.
+   * [AJAX] Send a reply from the vendor.
    */
   public function sendMessage(Request $request)
   {
+    Log::debug('[sendMessage] Request', $request->all());
     $request->validate([
       'customer_id' => 'required|exists:users,user_id',
       'message_text' => 'required|string|max:1000',
     ]);
 
-    $vendor = $this->getVendor();
-    $vendorUserId = $vendor->user_id;
-    $context = $this->resolveBusinessContext($vendor);
-    $activeBusinessId = $context['activeBusinessId'];
+    // --- Start: Inlined Logic ---
+    $vendorUserId = Auth::id();
+    $vendor = $vendorUserId ? Vendor::where('user_id', $vendorUserId)->first() : null;
+    if (!$vendor) {
+      return response()->json(['error' => 'Vendor not found.'], 404);
+    }
+    // Use session to get active business ID, consistent with buildViewData
+    $activeBusinessId = session('active_business_id');
+    // --- End: Inlined Logic ---
 
     if (!$activeBusinessId) {
       return response()->json(['error' => 'No active business selected.'], 400);
     }
 
-    $prefixedMessage = self::BIZ_PREFIX . $activeBusinessId . self::BIZ_SUFFIX . $request->message_text;
-
-    // Create the message WITH the prefix
     $message = Message::create([
-      'sender_id' => $vendorUserId,
+      'sender_id' => $activeBusinessId,
+      'sender_role' => 'business',
       'receiver_id' => $request->customer_id,
-      'message_text' => $prefixedMessage, // Save prefixed message
+      'receiver_role' => 'customer',
+      'message_text' => $request->message_text,
       'sent_at' => now(),
       'is_read' => false,
     ]);
+    Log::debug('[sendMessage] Message created', ['id' => $message->message_id]);
 
-    // --- Broadcasting ---
-    // Create a copy for broadcasting
-    $messageForBroadcast = $message->replicate();
-    $messageForBroadcast->message_text = $prefixedMessage;
-    broadcast(new MessageSent($messageForBroadcast))->toOthers(); // Use toOthers()
-    Log::debug('Vendor sent message, event dispatched.'); // Log dispatch
+    broadcast(new MessageSent($message))->toOthers();
+    Log::debug('[sendMessage] Broadcast event dispatched.');
 
-    // --- Prepare AJAX Response ---
-    // Clean the message text for the *AJAX* response
-    $message->message_text = $request->message_text;
-    $message->load('sender:user_id,fullname');
+    // --- MANUALLY ADD SENDER FOR AJAX RESPONSE ---
+    $business = BusinessDetail::find($activeBusinessId);
+    $message->sender = $business;
+    // --- END MANUAL ADD ---
 
     return response()->json($message, 201);
   }

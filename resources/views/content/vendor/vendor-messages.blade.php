@@ -1,5 +1,7 @@
 @extends('layouts/contentNavbarLayout')
 
+@section('title', 'Messages')
+
 @section('content')
     <script src="https://js.pusher.com/7.2/pusher.min.js"></script>
 
@@ -71,7 +73,7 @@
     </div>
 
     <style>
-        /* Make the whole main section clean white instead of grey */
+        /* ... (all your existing styles are perfect) ... */
         .main-content-area {
             background: #fdfdfd !important;
             border-radius: 12px;
@@ -80,12 +82,10 @@
             border: 1px solid #f2f2f2;
         }
 
-        /* Simple soft background overall (if your layout injects grey outside) */
         body {
             background-color: #fdfdfd !important;
         }
 
-        /* Conversation list styling */
         .convo-item {
             transition: background-color 0.2s, transform 0.1s;
         }
@@ -100,10 +100,8 @@
             border-left: 4px solid #ffb300;
         }
 
-        /* Make chat box feel airy */
         #chat-box {
             background-color: #ffffff;
-            /* remove that light grey */
             border-radius: 8px;
             padding: 1rem;
         }
@@ -111,7 +109,6 @@
         .message-wrapper {
             max-width: 85%;
             margin-bottom: 0.5rem;
-
         }
 
         .message-wrapper.text-start {
@@ -143,7 +140,6 @@
             display: inline-block;
         }
 
-        /* Subtle header colors for consistency */
         .card-header {
             background-color: #ffb54c;
             color: #fff;
@@ -155,7 +151,6 @@
             color: #6c4a00 !important;
         }
 
-        /* Input form */
         #vendorReplyForm input.form-control:focus {
             box-shadow: none;
             border-color: #ffc107;
@@ -176,28 +171,45 @@
             background-color: #ffa726;
         }
     </style>
-    {{-- Keep all your existing JS logic intact --}}
+
     <script>
         $(document).ready(function() {
-            // Entire original JS logic unchanged
-            const currentVendorUserId = {{ auth()->id() }};
+            // This is the ID of the logged-in VENDOR'S USER
+            const currentVendorUserId = {{ auth()->user()->user_id }};
+            // This is the ID of the BUSINESS they are acting as
+            const activeBusinessId = {{ $activeBusinessId ?? 'null' }};
+
             let activeCustomerId = null;
             let pusher = null;
             let channel = null;
-            const activeBusinessId = {{ $activeBusinessId }};
 
             function appendMessage(message) {
-                if (!message || typeof message.sender_id === 'undefined') {
+                if (!message || typeof message.sender_role === 'undefined') { // <-- Check for role
                     console.error("Invalid message object:", message);
                     return;
                 }
 
-                const isSender = message.sender_id == currentVendorUserId;
+                // --- THIS IS THE FIX ---
+                // We check the ROLE, not the sender_id.
+                // If the sender's role is 'business', it's "You".
+                const isSender = message.sender_role === 'business';
+                // --- END FIX ---
+
                 const alignClass = isSender ? 'text-end' : 'text-start';
-                let senderName = isSender ? 'You' : 'Customer';
-                if (message.sender && message.sender.fullname) {
-                    senderName = message.sender.fullname;
+
+                // --- FIX FOR SENDER NAME ---
+                let senderName = '';
+                if (isSender) {
+                    senderName = 'You';
+                } else {
+                    // Use the sender's name from the object (e.g., "Jomar Nicholas Veras")
+                    if (message.sender && message.sender.fullname) {
+                        senderName = message.sender.fullname;
+                    } else {
+                        senderName = 'Customer'; // Fallback
+                    }
                 }
+                // --- END FIX ---
 
                 const messageHtml = `
                     <div class="message-wrapper ${alignClass} mb-2" data-message-id="${message.message_id || ''}">
@@ -226,10 +238,16 @@
 
                 const channelName = `chat.business.${businessId}`;
                 channel = pusher.subscribe(channelName);
+
                 channel.bind('App\\Events\\MessageSent', data => {
                     const message = data.message;
-                    if (message && message.sender_id != currentVendorUserId && message.sender_id ==
+
+                    // --- THIS IS THE PUSHER FIX ---
+                    // Only append if the message is from a 'customer'
+                    // AND it belongs to the currently active chat window.
+                    if (message && message.sender_role === 'customer' && message.sender_id ==
                         activeCustomerId) {
+                        // --- END FIX ---
                         if (!$(`#chat-box [data-message-id="${message.message_id}"]`).length) {
                             appendMessage(message);
                             scrollToBottom();
