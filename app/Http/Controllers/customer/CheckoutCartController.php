@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Exception;
+use App\Services\NotificationService;
 
 use App\Models\{
   Order,
@@ -20,7 +21,8 @@ use App\Models\{
   Customer,
   PaymentMethod,
   CheckoutDraft,
-  User
+  User,
+  Vendor
 };
 
 class CheckoutCartController extends Controller
@@ -492,7 +494,9 @@ class CheckoutCartController extends Controller
 
     $orderType = $draft->delivery['order_type'] ?? 'delivery';
 
-    DB::transaction(function () use ($user, $draft, $businessId, $orderType) {
+    $order = null;
+
+    DB::transaction(function () use ($user, $draft, $businessId, $orderType, $order) {
       $order = Order::create([
         'user_id' => $user->user_id,
         'business_id' => $businessId,
@@ -500,6 +504,49 @@ class CheckoutCartController extends Controller
         'delivery_date' => $draft->delivery['delivery_date'] ?? now()->toDateString(),
         'delivery_time' => $draft->delivery['delivery_time'] ?? null,
         'payment_method_id' => $draft->payment_method_id,
+      ]);
+
+
+      // Find user id to pass in Notif
+      $vendorId = BusinessDetail::find($businessId)->vendor_id;
+      $vendor_userid = Vendor::find($vendorId)->user_id;
+
+      // Send notifications
+      $notify = app(NotificationService::class);
+
+      // 1. Notify vendor (for this business)
+      $notify->createNotification([
+        'user_id' => $vendor_userid,   // or vendor user_id if vendors have separate accounts
+        'actor_user_id' => $user->user_id,
+        'event_type' => 'order_created',
+        'reference_table' => 'orders',
+        'reference_id' => $order->order_id,
+        'business_id' => $businessId,
+        'recipient_role' => 'vendor',
+        'payload' => [
+          'order_id' => $order->order_id,
+          'title' => "New Order with Id #{$order->order_id}",
+          'excerpt' => 'A customer placed a new order.',
+          'status' => 'Pending',
+          'url' => "/vendor/vorders/{$order->order_id}",
+        ],
+      ]);
+
+      // 2. Notify customer
+      $notify->createNotification([
+        'user_id' => $user->user_id,
+        'actor_user_id' => $user->user_id,
+        'event_type' => 'order_confirmed',
+        'reference_table' => 'orders',
+        'reference_id' => $order->order_id,
+        'recipient_role' => 'customer',
+        'payload' => [
+          'order_id' => $order->order_id,
+          'title' => "Your Order with Id #{$order->order_id} has been placed!",
+          'excerpt' => 'Thank you for your order.',
+          'status' => 'Pending',
+          'url' => "/customer/orders",
+        ],
       ]);
 
       foreach ($draft->cart as $item) {
@@ -655,6 +702,63 @@ class CheckoutCartController extends Controller
       ]);
 
       $draft->update(['processed_at' => now()]);
+
+      // Find user id to pass in Notif
+      $vendorId = BusinessDetail::find($businessId)->vendor_id;
+      $vendor_userid = Vendor::find($vendorId)->user_id;
+
+      // Send notifications
+      $notify = app(NotificationService::class);
+
+      // 1. Notify vendor (for this business)
+      $notify->createNotification([
+        'user_id' => $vendor_userid,   // or vendor user_id if vendors have separate accounts
+        'actor_user_id' => $draft->user_id,
+        'event_type' => 'order_created',
+        'reference_table' => 'orders',
+        'reference_id' => $order->order_id,
+        'business_id' => $businessId,
+        'recipient_role' => 'vendor',
+        'payload' => [
+          'order_id' => $order->order_id,
+          'title' => "New Order #{$order->order_id}",
+          'excerpt' => 'A customer placed a new order.',
+          'status' => 'Pending',
+          'url' => "/vendor/vorders/{$order->order_id}",
+        ],
+      ]);
+
+      // 2. Notify customer
+      $notify->createNotification([
+        'user_id' => $draft->user_id,
+        'actor_user_id' => $draft->user_id,
+        'event_type' => 'order_confirmed',
+        'reference_table' => 'orders',
+        'reference_id' => $order->order_id,
+        'recipient_role' => 'customer',
+        'payload' => [
+          'order_id' => $order->order_id,
+          'title' => "Your Order #{$order->order_id} has been placed!",
+          'excerpt' => 'Thank you for your order.',
+          'status' => 'Pending',
+          'url' => "/customer/orders",
+        ],
+      ]);
+
+      foreach ($draft->cart as $item) {
+        $prod = Product::find($item['product_id']);
+        OrderItem::create([
+          'order_id' => $order->order_id,
+          'product_id' => $prod->product_id,
+          'product_name' => $prod->item_name,
+          'product_description' => $prod->description ?? null,
+          'quantity' => (int)$item['quantity'],
+          'price_at_order_time' => $item['price'],
+          'order_item_note' => $draft->item_notes[$item['product_id']] ?? null,
+          'order_item_status' => 'Pending'
+        ]);
+      }
+
       Log::info("Order #{$order->order_id} created successfully from online draft #{$draft->checkout_draft_id}");
     });
   }
@@ -774,118 +878,5 @@ class CheckoutCartController extends Controller
     session(['cart' => $finalCart]);
 
     Log::info('Cleaned items from session cart.', ['removed_product_ids' => $processedProductIds]);
-  }
-
-  /**
-   * Attempt to cancel an existing order for the authenticated user.
-   * Important behaviors:
-   *  - Verifies that all order items are still in 'Pending' status before canceling.
-   *  - For online payments: finds the associated payment via PaymentDetail.transaction_id,
-   *    looks up the 'pay_...' ID from the Payment Intent, and issues a refund via PayMongo.
-   *  - For COD/offline: simply updates order items and payment detail statuses locally.
-   *  - All external API calls and DB updates are logged for auditability.
-   */
-  public function cancelOrder(Request $request, $order_id)
-  {
-    Log::info("Attempting to cancel order #{$order_id} for user " . Auth::id(), ['method' => __METHOD__]);
-
-    DB::beginTransaction();
-    try {
-      $order = Order::with('paymentDetails.paymentMethod', 'items')
-        ->where('order_id', $order_id)
-        ->where('user_id', Auth::id())
-        ->firstOrFail();
-
-      $canCancel = $order->items->every(fn($item) => $item->order_item_status === 'Pending');
-
-      if (!$canCancel) {
-        DB::rollBack();
-        Log::warning('Cancel attempt for non-cancellable order', ['order_id' => $order->order_id, 'user_id' => Auth::id()]);
-        return back()->with('error', 'This order can no longer be cancelled as it is already being processed.');
-      }
-
-      $paymentDetail = $order->paymentDetails->first();
-      $paymentMethod = $paymentDetail?->paymentMethod;
-      $isCod = false;
-
-      if ($paymentMethod) {
-        $methodName = strtolower(trim($paymentMethod->method_name));
-        $isCod = in_array($methodName, ['cash', 'cod', 'card on delivery']);
-      }
-
-      if ($isCod || !$paymentDetail || !$paymentDetail->transaction_id || $paymentDetail->payment_status !== 'Paid') {
-        Log::info("Cancelling COD/Offline order #{$order->order_id} locally.");
-
-        $order->items()->update(['order_item_status' => 'Cancelled']);
-        if ($paymentDetail) {
-          $paymentDetail->update(['payment_status' => 'Cancelled']);
-        }
-      } else {
-        Log::info("Processing PayMongo refund for order #{$order->order_id}");
-
-        $paymentIntentId = $paymentDetail->transaction_id;
-        $refundAmount = (int) round($order->total * 100);
-        $paymongoSecret = config('services.paymongo.secret');
-
-        Log::info("Retrieving Payment Intent {$paymentIntentId} to find payment_id");
-
-        $retrieveResponse = Http::withHeaders([
-          'accept' => 'application/json',
-          'authorization' => 'Basic ' . base64_encode($paymongoSecret . ':')
-        ])->get("https://api.paymongo.com/v1/payment_intents/{$paymentIntentId}");
-
-        $intentData = $retrieveResponse->json();
-
-        $paymentId = $intentData['data']['attributes']['payments'][0]['id'] ?? null;
-
-        if (!$paymentId) {
-          Log::error("Could not find a successful payment_id for Intent {$paymentIntentId}", ['response' => $intentData]);
-          throw new Exception('Could not find the associated charge for this order.');
-        }
-
-        Log::info("Found payment_id {$paymentId} for refund.");
-
-        $response = Http::withHeaders([
-          'accept' => 'application/json',
-          'content-type' => 'application/json',
-          'authorization' => 'Basic ' . base64_encode($paymongoSecret . ':')
-        ])->post('https://api.paymongo.com/v1/refunds', [
-          'data' => [
-            'attributes' => [
-              'amount' => $refundAmount,
-              'payment_id' => $paymentId,
-              'reason' => 'requested_by_customer'
-            ]
-          ]
-        ]);
-
-        $responseData = $response->json();
-
-        if ($response->successful() && isset($responseData['data']['attributes']['status'])) {
-
-          Log::info("PayMongo refund successful for order #{$order->order_id}", ['response' => $responseData]);
-
-          $order->items()->update(['order_item_status' => 'Cancelled']);
-
-          $paymentDetail->update([
-            'payment_status' => 'Refunded',
-          ]);
-        } else {
-          Log::error("PayMongo refund FAILED for order #{$order->order_id}", ['response' => $responseData]);
-          throw new Exception('The payment gateway rejected the refund request. Please contact support.');
-        }
-      }
-
-      DB::commit();
-      return redirect()->route('customer.orders.index')
-        ->with('success', 'Order has been successfully cancelled.')
-        ->header('Cache-Control', 'no-cache, no-store, must-revalidate') // HTTP 1.1.
-        ->header('Pragma', 'no-cache') // HTTP 1.0.
-        ->header('Expires', '0');
-    } catch (Exception $e) {
-      DB::rollBack();
-      Log::error("Failed to cancel order #{$order_id}", ['method' => __METHOD__, 'error' => $e->getMessage()]);
-      return back()->with('error', 'Failed to cancel order: ' . $e->getMessage());
-    }
   }
 }
