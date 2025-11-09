@@ -518,7 +518,7 @@ class CheckoutCartController extends Controller
       $notify->createNotification([
         'user_id' => $vendor_userid,   // or vendor user_id if vendors have separate accounts
         'actor_user_id' => $user->user_id,
-        'event_type' => 'order_created',
+        'event_type' => 'ORDER_CREATED',
         'reference_table' => 'orders',
         'reference_id' => $order->order_id,
         'business_id' => $businessId,
@@ -528,7 +528,7 @@ class CheckoutCartController extends Controller
           'title' => "New Order with Id #{$order->order_id}",
           'excerpt' => 'A customer placed a new order.',
           'status' => 'Pending',
-          'url' => "/vendor/vorders/{$order->order_id}",
+          'url' => "/vendor/orders/cart",
         ],
       ]);
 
@@ -536,7 +536,7 @@ class CheckoutCartController extends Controller
       $notify->createNotification([
         'user_id' => $user->user_id,
         'actor_user_id' => $user->user_id,
-        'event_type' => 'order_confirmed',
+        'event_type' => 'ORDER_CONFIRMED',
         'reference_table' => 'orders',
         'reference_id' => $order->order_id,
         'recipient_role' => 'customer',
@@ -714,7 +714,7 @@ class CheckoutCartController extends Controller
       $notify->createNotification([
         'user_id' => $vendor_userid,   // or vendor user_id if vendors have separate accounts
         'actor_user_id' => $draft->user_id,
-        'event_type' => 'order_created',
+        'event_type' => 'ORDER_CREATED',
         'reference_table' => 'orders',
         'reference_id' => $order->order_id,
         'business_id' => $businessId,
@@ -724,7 +724,7 @@ class CheckoutCartController extends Controller
           'title' => "New Order #{$order->order_id}",
           'excerpt' => 'A customer placed a new order.',
           'status' => 'Pending',
-          'url' => "/vendor/vorders/{$order->order_id}",
+          'url' => "/vendor/orders/cart",
         ],
       ]);
 
@@ -732,7 +732,7 @@ class CheckoutCartController extends Controller
       $notify->createNotification([
         'user_id' => $draft->user_id,
         'actor_user_id' => $draft->user_id,
-        'event_type' => 'order_confirmed',
+        'event_type' => 'ORDER_CONFIRMED',
         'reference_table' => 'orders',
         'reference_id' => $order->order_id,
         'recipient_role' => 'customer',

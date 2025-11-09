@@ -230,6 +230,43 @@ class PreorderOrderController extends Controller
         if ($orderItem) {
           $orderItem->order_item_status = $request->status;
           $orderItem->save();
+
+          // [START] SAFE NOTIFICATION (FALLBACK)
+          try {
+            // Load the parent order to get customer ID
+            $orderItem->load('order');
+            if ($orderItem->order) {
+              $parentOrder = $orderItem->order;
+              $notify = app(\App\Services\NotificationService::class);
+              $actorUserId = Auth::id();
+              $newStatus = $request->status;
+
+              $notify->createNotification([
+                'user_id'         => $parentOrder->user_id,   // The Customer
+                'actor_user_id'   => $actorUserId,          // The Vendor User
+                'event_type'      => 'PREORDER_STATUS_CHANGED',
+                'reference_table' => 'orders, preorder',
+                'reference_id'    => $parentOrder->order_id,
+                'business_id'     => $parentOrder->business_id,
+                'recipient_role'  => 'customer',
+                'payload' => [
+                  'order_id'       => $parentOrder->order_id,
+                  'title'          => "Your Pre-Order #{$parentOrder->order_id} status has changed",
+                  'excerpt'        => "An item in your order is now: {$newStatus}.",
+                  'status'         => $newStatus,
+                  'url'            => "/customer/preorder"
+                ]
+              ]);
+            }
+          } catch (\Throwable $e) {
+            // Do NOT re-throw.
+            Log::error('Failed to send pre-order (fallback) status notification', [
+              'order_item_id' => $orderItem->order_item_id,
+              'error' => $e->getMessage()
+            ]);
+          }
+          // [END] SAFE NOTIFICATION
+
           DB::commit();
           Log::info('preorder.updateStatus - updated single order_item fallback', ['order_item_id' => $id, 'status' => $request->status]);
 
@@ -294,6 +331,38 @@ class PreorderOrderController extends Controller
 
       $preorder->updated_at = now();
       $preorder->save();
+
+      // [START] SAFE NOTIFICATION
+      try {
+        $notify = app(\App\Services\NotificationService::class);
+        $actorUserId = Auth::id(); // The Vendor User
+        $newStatus = $request->status;
+
+        // $order is already defined in this block
+        $notify->createNotification([
+          'user_id'         => $order->user_id,        // The Customer (recipient)
+          'actor_user_id'   => $actorUserId,           // The Vendor User (actor)
+          'event_type'      => 'PREORDER_STATUS_CHANGED',
+          'reference_table' => 'orders, preorder',
+          'reference_id'    => $order->order_id,
+          'business_id'     => $order->business_id,
+          'recipient_role'  => 'customer',
+          'payload' => [
+            'order_id'       => $order->order_id,
+            'title'          => "Your Pre-Order #{$order->order_id} status has changed",
+            'excerpt'        => "Your pre-order status is now: {$newStatus}.",
+            'status'         => $newStatus,
+            'url'            => "/customer/preorder" // Or a specific order URL
+          ]
+        ]);
+      } catch (\Throwable $e) {
+        // Do NOT re-throw. Log the error and continue.
+        Log::error('Failed to send pre-order status notification', [
+          'order_id' => $order->order_id,
+          'error' => $e->getMessage()
+        ]);
+      }
+      // [END] SAFE NOTIFICATION
 
       DB::commit();
 

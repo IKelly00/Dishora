@@ -20,13 +20,16 @@ class CustomerMenuController extends Controller
     return Auth::user()?->vendor;
   }
 
+  /**
+   * Resolve the active business and related status flags for a vendor.
+   */
   private function resolveBusinessContext(Vendor $vendor): array
   {
-    // ... existing code ...
     $vendorStatus = $vendor->registration_status ?? null;
 
     $activeBusinessId = session('active_business_id');
 
+    // Auto-select first business if none chosen yet
     if (!$activeBusinessId && $vendor->businessDetails()->exists()) {
       $activeBusinessId = $vendor->businessDetails()
         ->orderBy('business_id')
@@ -43,6 +46,7 @@ class CustomerMenuController extends Controller
     $businessStatus = $business?->verification_status ?? 'Unknown';
     $showVerificationModal = $businessStatus === 'Pending';
 
+    // Reset "vendor status modal shown" when status first becomes Pending
     if ($vendorStatus === 'Pending' && session('last_vendor_status') !== 'Pending') {
       session(['vendor_status_modal_shown' => false]);
     }
@@ -57,7 +61,6 @@ class CustomerMenuController extends Controller
       Log::info('Vendor Status Session', ['vendor_status_modal_shown' => session('vendor_status_modal_shown')]);
     }
 
-
     return [
       'activeBusinessId'        => $activeBusinessId,
       'businessStatus'          => $businessStatus,
@@ -68,14 +71,16 @@ class CustomerMenuController extends Controller
     ];
   }
 
+  /**
+   * Build base view data depending on whether the user has a vendor profile.
+   */
   private function buildViewData(?Vendor $vendor, array $extra = []): array
   {
-    // ... existing code ...
     if (!$vendor) {
       return array_merge([
-        'hasVendorAccess'       => false,
-        'showRolePopup'         => true,
-        'vendorStatus'          => session('vendorStatus', null),
+        'hasVendorAccess'         => false,
+        'showRolePopup'           => true,
+        'vendorStatus'            => session('vendorStatus', null),
         'showVendorStatusModal'   => session('vendorStatus') === 'Pending',
         'showVendorRejectedModal' => session('vendorStatus') === 'Rejected',
         'hasShownVendorModal'     => session('vendor_status_modal_shown', false),
@@ -83,15 +88,17 @@ class CustomerMenuController extends Controller
     }
 
     return array_merge([
-      'hasVendorAccess' => $vendor->businessDetails()->exists(),
-      'showRolePopup' => false,
+      'hasVendorAccess'     => $vendor->businessDetails()->exists(),
+      'showRolePopup'       => false,
       'hasShownVendorModal' => session('vendor_status_modal_shown', false),
     ], $this->resolveBusinessContext($vendor), $extra);
   }
 
+  /**
+   * Customer dashboard: nearby vendors, categories, past order products, deals.
+   */
   public function index()
   {
-    // ... existing code ...
     if (strtolower(session('active_role', 'customer')) !== 'customer') {
       abort(403, 'Unauthorized action.');
     }
@@ -102,6 +109,7 @@ class CustomerMenuController extends Controller
 
     $vendors = collect();
 
+    // If customer has location, show nearby vendors filtered by availability
     if ($customer && $customer->latitude && $customer->longitude) {
       $nearbyVendors = $this->locator->getNearbyVendors(
         $customer->customer_id,
@@ -113,6 +121,7 @@ class CustomerMenuController extends Controller
 
     $categories = ProductCategory::all();
 
+    // Products the user has ordered before that are currently available
     $userId = $user->user_id;
     $pastOrderProducts = Product::with(['category', 'dietarySpecifications', 'business'])
       ->where('is_available', true)
@@ -129,9 +138,12 @@ class CustomerMenuController extends Controller
     return view('content.customer.customer-dashboard', $viewData);
   }
 
+  /**
+   * Filter to businesses that have at least one available product,
+   * add distance/vendor info, and include encrypted IDs.
+   */
   public function filterVendorsWithProducts($nearbyVendors)
   {
-    // ... existing code ...
     $businessIds = $nearbyVendors->pluck('business_id');
 
     return BusinessDetail::with(['products' => function ($q) {
@@ -162,9 +174,11 @@ class CustomerMenuController extends Controller
       ->values();
   }
 
+  /**
+   * [AJAX] Get products by category (or all if 'all' or no category specified).
+   */
   public function getProductsByCategory(Request $request)
   {
-    // ... existing code ...
     $categoryId = $request->get('category_id');
 
     $productsQuery = Product::with(['category', 'dietarySpecifications'])
@@ -177,14 +191,16 @@ class CustomerMenuController extends Controller
     $products = $productsQuery->get();
 
     return response()->json([
-      'success' => true,
+      'success'  => true,
       'products' => $products
     ]);
   }
 
+  /**
+   * Start selling setup screen for customers who want to become vendors.
+   */
   public function customerStartSelling()
   {
-    // ... existing code ...
     Log::info('CustomerMenuController customerStartSelling');
 
     $user = Auth::user();
@@ -193,16 +209,18 @@ class CustomerMenuController extends Controller
     $vendor = $this->getVendor();
 
     $viewData = $this->buildViewData($vendor, [
-      'fullname'        => $user->fullname,
-      'paymentMethods'  => $paymentMethods,
+      'fullname'       => $user->fullname,
+      'paymentMethods' => $paymentMethods,
     ]);
 
     return view('content.customer.customer-start-selling', $viewData);
   }
 
+  /**
+   * Show a selected business' public page with its products.
+   */
   public function selectedBusiness($businessId, $vendorId)
   {
-    // ... existing code ...
     try {
       $businessId = Crypt::decryptString($businessId);
       $vendorId   = Crypt::decryptString($vendorId);
@@ -234,9 +252,11 @@ class CustomerMenuController extends Controller
     return view('content.customer.customer-selected-business', $viewData);
   }
 
+  /**
+   * List all approved vendors with at least one product.
+   */
   public function vendors()
   {
-    // ... existing code ...
     $vendors = BusinessDetail::with('products')
       ->where('verification_status', 'Approved')
       ->whereHas('products')
@@ -248,9 +268,11 @@ class CustomerMenuController extends Controller
     return view('content.customer.customer-vendors', $viewData);
   }
 
+  /**
+   * Remember that we've shown the vendor status modal to this user.
+   */
   public function dismissStatusModal(Request $request)
   {
-    // ... existing code ...
     session(['vendor_status_modal_shown' => true]);
     return response()->json(['success' => true]);
   }
@@ -260,7 +282,6 @@ class CustomerMenuController extends Controller
    */
   public function messages()
   {
-    // --- START: UPDATED LOGIC ---
     $customerId = Auth::id();
     Log::info('[Customer messages] Fetching conversations', ['customer_id' => $customerId]);
 
@@ -274,6 +295,7 @@ class CustomerMenuController extends Controller
       ->orderBy('sent_at', 'desc')
       ->get();
 
+    // Group by counterparty business_id
     $conversationsByBusinessId = $messages->groupBy(function ($message) use ($customerId) {
       if ($message->sender_id == $customerId && $message->sender_role == 'customer') {
         return $message->receiver_id;
@@ -289,10 +311,10 @@ class CustomerMenuController extends Controller
     $businessDetails = BusinessDetail::whereIn('business_id', $conversationsByBusinessId->keys())->get();
 
     $conversations = $businessDetails->map(function ($business) use ($conversationsByBusinessId, $customerId) {
-
       $businessMessages = $conversationsByBusinessId->get($business->business_id);
       $lastMessage = $businessMessages->first();
 
+      // Count unread messages for the customer for this business
       $business->unread_count = $businessMessages
         ->where('receiver_id', $customerId)
         ->where('receiver_role', 'customer')
@@ -306,20 +328,17 @@ class CustomerMenuController extends Controller
       return $business;
     })->sortByDesc('latest_message_time');
 
-    // We also need to pass the vendor view data for the header/layout
     $vendor = $this->getVendor();
     $viewData = $this->buildViewData($vendor, ['conversations' => $conversations]);
 
     return view('content.customer.customer-messages', $viewData);
-    // --- END: UPDATED LOGIC ---
   }
 
   /**
-   * [AJAX] Fetch a specific message thread for a business.
+   * [AJAX] Fetch a specific message thread for a business and mark unread as read.
    */
   public function getMessageThread($business_id)
   {
-    // --- START: UPDATED LOGIC ---
     $customerId = Auth::id();
     Log::debug('[Customer getMessageThread]', ['business_id' => $business_id, 'customer_id' => $customerId]);
 
@@ -339,6 +358,7 @@ class CustomerMenuController extends Controller
 
     Log::debug('[Customer getMessageThread] Found messages', ['count' => $messages->count()]);
 
+    // Mark messages addressed to the customer as read
     $messageIdsToMarkAsRead = $messages
       ->where('receiver_id', $customerId)
       ->where('receiver_role', 'customer')
@@ -349,58 +369,91 @@ class CustomerMenuController extends Controller
       Message::whereIn('message_id', $messageIdsToMarkAsRead)->update(['is_read' => true]);
     }
 
-    // --- MANUALLY ADD SENDER INFO ---
+    // Add sender object for UI convenience (customer or business)
     $customer = User::find($customerId);
     $business = BusinessDetail::find($business_id);
 
     $messages->map(function ($message) use ($customer, $business) {
-      if ($message->sender_role == 'customer') {
-        $message->sender = $customer;
-      } else {
-        $message->sender = $business;
-      }
+      $message->sender = $message->sender_role == 'customer' ? $customer : $business;
       return $message;
     });
-    // --- END MANUAL ADD ---
 
     return response()->json($messages->values());
-    // --- END: UPDATED LOGIC ---
   }
 
   /**
-   * [AJAX] Send a new message from the customer to a vendor.
+   * [AJAX] Send a new message from the customer to a vendor and notify the vendor.
    */
   public function sendMessage(Request $request)
   {
-    // --- START: UPDATED LOGIC ---
     Log::debug('[Customer sendMessage]', $request->all());
+
     $request->validate([
-      'business_id' => 'required|exists:business_details,business_id',
+      'business_id'  => 'required|exists:business_details,business_id',
       'message_text' => 'required|string|max:1000',
     ]);
 
     $customerId = Auth::id();
 
     $message = Message::create([
-      'sender_id' => $customerId,
-      'sender_role' => 'customer',
-      'receiver_id' => $request->business_id,
+      'sender_id'     => $customerId,
+      'sender_role'   => 'customer',
+      'receiver_id'   => $request->business_id,
       'receiver_role' => 'business',
-      'message_text' => $request->message_text,
-      'sent_at' => now(),
-      'is_read' => false,
+      'message_text'  => $request->message_text,
+      'sent_at'       => now(),
+      'is_read'       => false,
     ]);
     Log::debug('[Customer sendMessage] Message created', ['id' => $message->message_id]);
 
+    // Notify other listeners (e.g., websockets)
     broadcast(new MessageSent($message))->toOthers();
     Log::debug('Customer sent message, event dispatched.');
 
-    // --- MANUALLY ADD SENDER FOR AJAX RESPONSE ---
+    // Best-effort vendor notification; errors should not block sending
+    try {
+      $business = \App\Models\BusinessDetail::query()
+        ->with(['vendor.user'])
+        ->find($request->business_id);
+
+      if ($business && optional($business->vendor)->user) {
+        $vendorUser   = $business->vendor->user;
+        $customerUser = Auth::user();
+        $notify       = app(\App\Services\NotificationService::class);
+
+        $notify->createNotification([
+          'user_id'         => $vendorUser->user_id,
+          'actor_user_id'   => $customerUser->user_id,
+          'event_type'      => 'NEW_MESSAGE',
+          'reference_table' => 'messages',
+          'reference_id'    => $message->message_id,
+          'business_id'     => $business->business_id,
+          'recipient_role'  => 'vendor',
+          'payload'         => [
+            'title'       => "New message from {$customerUser->fullname}",
+            'excerpt'     => 'You have a new message from a customer.',
+            'sender_name' => $customerUser->fullname,
+            'url'         => '/vendor/messages',
+          ],
+        ]);
+      } else {
+        Log::warning('[sendMessage] Could not find vendor user to notify for new message', [
+          'business_id' => $request->business_id ?? null,
+          'message_id'  => $message->message_id ?? null,
+        ]);
+      }
+    } catch (\Throwable $e) {
+      Log::error('[sendMessage] Failed to send new message notification', [
+        'error'       => $e->getMessage(),
+        'business_id' => $request->business_id ?? null,
+        'message_id'  => $message->message_id ?? null,
+      ]);
+    }
+
+    // Attach sender object for the AJAX response
     $customer = User::find($customerId);
     $message->sender = $customer;
-    // --- END MANUAL ADD ---
 
     return response()->json($message, 201);
-    // --- END: UPDATED LOGIC ---
   }
 }

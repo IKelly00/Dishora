@@ -258,24 +258,35 @@ class PendingOrderController extends Controller
           ]);
         }
 
-        // send notifications
-        $notify->createNotification([
-          'user_id' => $order->user_id,
-          'actor_user_id' => auth()->id(),
-          'event_type' => 'order_status_changed',
-          'reference_table' => 'orders',
-          'reference_id' => $order->order_id,
-          'business_id' => $order->business_id,
-          'recipient_role' => 'customer',
-          'is_global' => false,
-          'payload' => [
+        $actorUserId = Auth::id();
+
+        // [START] SAFE NOTIFICATION
+        try {
+          $notify->createNotification([
+            'user_id' => $order->user_id,
+            'actor_user_id' => $actorUserId,
+            'event_type' => 'ORDER_STATUS_CHANGED',
+            'reference_table' => 'orders',
+            'reference_id' => $order->order_id,
+            'business_id' => $order->business_id,
+            'recipient_role' => 'customer',
+            'is_global' => false,
+            'payload' => [
+              'order_id' => $order->order_id,
+              'title' => "Your order with Id #{$order->order_id} status has changed to {$newStatus}",
+              'excerpt' => "Status: {$newStatus}",
+              'status' => $newStatus,
+              'url' => "/customer/orders",
+            ],
+          ]);
+        } catch (\Throwable $e) {
+          // Do NOT re-throw. Log the error and continue.
+          Log::error('Failed to send order status notification', [
             'order_id' => $order->order_id,
-            'title' => "Your order with Id #{$order->order_id} status has changed to {$newStatus}",
-            'excerpt' => "Status: {$newStatus}",
-            'status' => $newStatus,
-            'url' => "/orders/{$order->order_id}",
-          ],
-        ]);
+            'error' => $e->getMessage()
+          ]);
+        }
+        // [END] SAFE NOTIFICATION
 
         DB::commit();
 
@@ -340,24 +351,38 @@ class PendingOrderController extends Controller
           }
         }
 
-        // send notifications
-        $notify->createNotification([
-          'user_id' => $order->user_id,
-          'actor_user_id' => auth()->id(),
-          'event_type' => 'order_status_changed',
-          'reference_table' => 'orders',
-          'reference_id' => $order->order_id,
-          'business_id' => $order->business_id,
-          'recipient_role' => 'customer',
-          'is_global' => false,
-          'payload' => [
-            'order_id' => $order->order_id,
-            'title' => "Your order with Id #{$order->order_id} status has changed to {$newStatus}",
-            'excerpt' => "Status: {$newStatus}",
-            'status' => $newStatus,
-            'url' => "/orders/{$order->order_id}",
-          ],
-        ]);
+        $actorUserId = Auth::id();
+
+        // [START] SAFE NOTIFICATION
+        try {
+          // Note: $order is not defined here, we have $orderOfItem
+          if ($orderOfItem) {
+            $notify->createNotification([
+              'user_id' => $orderOfItem->user_id, // Use the parent order
+              'actor_user_id' => $actorUserId,
+              'event_type' => 'ORDER_STATUS_CHANGED',
+              'reference_table' => 'orders',
+              'reference_id' => $orderOfItem->order_id,
+              'business_id' => $orderOfItem->business_id,
+              'recipient_role' => 'customer',
+              'is_global' => false,
+              'payload' => [
+                'order_id' => $orderOfItem->order_id,
+                'title' => "Your order with Id #{$orderOfItem->order_id} status has changed to {$newStatus}",
+                'excerpt' => "Status: {$newStatus}",
+                'status' => $newStatus,
+                'url' => "/customer/orders",
+              ],
+            ]);
+          }
+        } catch (\Throwable $e) {
+          // Do NOT re-throw. Log the error and continue.
+          Log::error('Failed to send order item status notification', [
+            'order_item_id' => $orderItem->order_item_id,
+            'error' => $e->getMessage()
+          ]);
+        }
+        // [END] SAFE NOTIFICATION
 
         DB::commit();
 

@@ -228,11 +228,17 @@ class OrdersController extends Controller
           $customerUser = Auth::user(); // The customer who is cancelling
           $notify = app(NotificationService::class);
 
+          // [START] DYNAMIC URL LOGIC
+          $vendorUrl = $order->preorderDetail
+            ? '/vendor/orders/preorder'
+            : '/vendor/orders/cart';
+          // [END] DYNAMIC URL LOGIC
+
           $notify->createNotification([
             'user_id'         => $vendorUser->user_id, // The Vendor (recipient)
             'actor_user_id'   => $customerUser->user_id, // The Customer (actor)
             'event_type'      => 'ORDER_CANCELLED_BY_CUSTOMER',
-            'reference_table' => 'orders',
+            'reference_table' => 'orders, preorder',
             'reference_id'    => $order->order_id,
             'business_id'     => $order->business_id,
             'recipient_role'  => 'vendor',
@@ -241,7 +247,7 @@ class OrdersController extends Controller
               'title'          => "Order with id #{$order->order_id} Cancelled",
               'excerpt'        => "The customer has cancelled order with id #{$order->order_id}.",
               'status'         => 'Cancelled',
-              'url'            => "/vendor/vorders/{$order->order_id}",
+              'url'            => $vendorUrl,
             ]
           ]);
         } else {

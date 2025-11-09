@@ -608,7 +608,7 @@ class CheckoutPreorderController extends Controller
             'user_id'         => $vendorUser->user_id, // Vendor (recipient)
             'actor_user_id'   => $user->user_id,      // Customer (actor)
             'event_type'      => 'PREORDER_CREATED',
-            'reference_table' => 'orders',
+            'reference_table' => 'orders, preorder',
             'reference_id'    => $order->order_id,
             'business_id'     => $businessId,
             'recipient_role'  => 'vendor',
@@ -617,7 +617,7 @@ class CheckoutPreorderController extends Controller
               'title'          => "New Pre-Order #{$order->order_id} (COD)",
               'excerpt'        => "A customer placed a new pre-order (COD).",
               'status'         => $preorderStatus ?? 'Pending', // Use status from PreOrder logic
-              'url'            => "/vendor/vorders/{$order->order_id}",
+              'url'            => "/vendor/orders/preorder",
             ]
           ]);
         }
@@ -627,7 +627,7 @@ class CheckoutPreorderController extends Controller
           'user_id'         => $user->user_id,      // Customer (recipient)
           'actor_user_id'   => $user->user_id,      // Customer (actor)
           'event_type'      => 'PREORDER_CONFIRMED',
-          'reference_table' => 'orders',
+          'reference_table' => 'orders, preorder',
           'reference_id'    => $order->order_id,
           'recipient_role'  => 'customer',
           'payload' => [
@@ -812,7 +812,7 @@ class CheckoutPreorderController extends Controller
             'user_id'         => $vendorUser->user_id,         // Vendor (recipient)
             'actor_user_id'   => $customerUser->user_id,      // Customer (actor)
             'event_type'      => 'PREORDER_CREATED',
-            'reference_table' => 'orders',
+            'reference_table' => 'orders, preorder',
             'reference_id'    => $order->order_id,
             'business_id'     => $businessId,
             'recipient_role'  => 'vendor',
@@ -821,7 +821,7 @@ class CheckoutPreorderController extends Controller
               'title'          => "New Pre-Order #{$order->order_id} (Paid)",
               'excerpt'        => "A customer placed and paid for a new pre-order.",
               'status'         => $preorderStatus,
-              'url'            => "/vendor/vorders/{$order->order_id}",
+              'url'            => "/vendor/orders/preorder",
             ]
           ]);
         }
@@ -832,7 +832,7 @@ class CheckoutPreorderController extends Controller
             'user_id'         => $customerUser->user_id,      // Customer (recipient)
             'actor_user_id'   => $customerUser->user_id,      // Customer (actor)
             'event_type'      => 'PREORDER_CONFIRMED',
-            'reference_table' => 'orders',
+            'reference_table' => 'orders, preorder',
             'reference_id'    => $order->order_id,
             'recipient_role'  => 'customer',
             'payload' => [
@@ -1100,7 +1100,7 @@ class CheckoutPreorderController extends Controller
           'user_id'         => $vendorUser->user_id,     // Vendor (recipient)
           'actor_user_id'   => $user->user_id,           // Customer (actor)
           'event_type'      => 'RECEIPT_UPLOADED',
-          'reference_table' => 'orders',
+          'reference_table' => 'orders, preorder',
           'reference_id'    => $order->order_id,
           'business_id'     => $order->business_id,
           'recipient_role'  => 'vendor',
@@ -1109,7 +1109,7 @@ class CheckoutPreorderController extends Controller
             'title'          => "Receipt Uploaded for Pre-Order #{$order->order_id}",
             'excerpt'        => "A customer has uploaded a receipt for verification.",
             'status'         => 'Receipt Uploaded',
-            'url'            => "/vendor/vorders/{$order->order_id}",
+            'url'            => "/vendor/orders/preorder",
           ]
         ]);
       }

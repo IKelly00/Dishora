@@ -241,7 +241,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
       Route::get('/vendor/feedback', [VendorReviewController::class, 'index'])->name('vendor.feedback.index');
 
       // Messages
-      Route::get('vendor/messages', [VendorMenuController::class, 'messages'])->name('vendor.messages');
+      Route::get('/vendor/messages', [VendorMenuController::class, 'messages'])->name('vendor.messages');
       Route::get('/vendor/messages/thread', [VendorMenuController::class, 'getMessageThread'])->name('vendor.messages.thread');
       Route::post('/vendor/messages/send', [VendorMenuController::class, 'sendMessage'])->name('vendor.messages.send');
 

@@ -450,6 +450,45 @@ class VendorMenuController extends Controller
     broadcast(new MessageSent($message))->toOthers();
     Log::debug('[sendMessage] Broadcast event dispatched.');
 
+    // [START] ADD NOTIFICATION
+    try {
+      // We need the business name for the payload
+      // $activeBusinessId is already defined in this method
+      $business = \App\Models\BusinessDetail::find($activeBusinessId);
+
+      // The Customer (recipient)
+      $customerUserId = $request->customer_id;
+
+      // The Vendor's User (actor)
+      $vendorUserId = Auth::id();
+
+      $notify = app(\App\Services\NotificationService::class);
+
+      $notify->createNotification([
+        'user_id'         => $customerUserId, // The Customer (recipient)
+        'actor_user_id'   => $vendorUserId,   // The Vendor's User (actor)
+        'event_type'      => 'NEW_MESSAGE',
+        'reference_table' => 'messages',
+        'reference_id'    => $message->message_id,
+        'business_id'     => $activeBusinessId, // So the customer knows which business it's from
+        'recipient_role'  => 'customer',
+        'payload' => [
+          'title'          => "New message from {$business->business_name}",
+          'excerpt'        => "You have a new message from {$business->business_name}.",
+          'sender_name'    => $business->business_name,
+          'url'            => "/customer/messages" // Or your customer's message URL
+        ]
+      ]);
+    } catch (\Throwable $e) {
+      // IMPORTANT: Do NOT re-throw.
+      // A notification failure should not stop the message from sending.
+      \Illuminate\Support\Facades\Log::error('[sendMessage] Failed to send new message notification to customer', [
+        'error' => $e->getMessage(),
+        'message_id' => $message->message_id
+      ]);
+    }
+    // [END] ADD NOTIFICATION
+
     // --- MANUALLY ADD SENDER FOR AJAX RESPONSE ---
     $business = BusinessDetail::find($activeBusinessId);
     $message->sender = $business;
