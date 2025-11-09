@@ -22,13 +22,13 @@ class CustomerLocationController extends Controller
     $user = Auth::user();
     $customer = Customer::where('user_id', $user->user_id)->first();
 
-    // ✅ ADD THIS CHECK FIRST
+    // ADD THIS CHECK FIRST
     if (!$customer) {
       Log::warning("Customer not found for user_id: {$user->user_id}");
       return response()->json(['error' => 'Customer not found'], 404);
     }
 
-    // ✅ NOW safe to log customer's stored location
+    // NOW safe to log customer's stored location
     Log::info('Customer Stored Location: ', [
       'lat' => $customer->latitude,
       'lng' => $customer->longitude
@@ -148,7 +148,7 @@ class CustomerLocationController extends Controller
     $lng = $request->input('lng');
     $place = $request->input('place_name');
 
-    Log::info("📍 Live location received: lat={$lat}, lng={$lng}, place={$place}");
+    Log::info("Live location received: lat={$lat}, lng={$lng}, place={$place}");
 
     if (!$customer) {
       Log::warning("Customer not found for user_id: {$user->user_id}");
