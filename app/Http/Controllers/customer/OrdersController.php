@@ -7,7 +7,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use App\Models\{Order, OrderItem, PreOrder};
+use Illuminate\Support\Facades\Http;
 use Exception;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\DB;
 
 class OrdersController extends Controller
@@ -107,72 +109,171 @@ class OrdersController extends Controller
     ]);
   }
 
-  public function cancel(Request $request, $orderId)
+  /**
+   * Attempt to cancel an existing order for the authenticated user.
+   * Important behaviors:
+   *  - Verifies that all order items are still in 'Pending' status before canceling.
+   *  - For online payments: finds the associated payment via PaymentDetail.transaction_id,
+   *    looks up the 'pay_...' ID from the Payment Intent, and issues a refund via PayMongo.
+   *  - For COD/offline: simply updates order items and payment detail statuses locally.
+   *  - All external API calls and DB updates are logged for auditability.
+   */
+  public function cancel(Request $request, $order_id)
   {
-    $user = Auth::user();
+    Log::info("Attempting to cancel order #{$order_id} for user " . Auth::id(), ['method' => __METHOD__]);
 
     DB::beginTransaction();
     try {
-      // Load order + items + related details and ensure ownership
-      $order = Order::with(['items', 'paymentDetails', 'preorderDetail'])
-        ->where('order_id', $orderId)
-        ->where('user_id', $user->user_id)
-        ->first();
+      $order = Order::with('paymentDetails.paymentMethod', 'items', 'preorderDetail')
+        ->where('order_id', $order_id)
+        ->where('user_id', Auth::id())
+        ->firstOrFail();
 
-      if (!$order) {
+      $canCancel = $order->items->every(fn($item) => $item->order_item_status === 'Pending');
+
+      if (!$canCancel) {
         DB::rollBack();
-        return redirect()->back()->with('error', 'Order not found or you are not authorized.');
+        Log::warning('Cancel attempt for non-cancellable order', ['order_id' => $order->order_id, 'user_id' => Auth::id()]);
+        return back()->with('error', 'This order can no longer be cancelled as it is already being processed.');
       }
 
-      // If order has no items -> reject (optional)
-      if ($order->items->isEmpty()) {
-        DB::rollBack();
-        return redirect()->back()->with('warning', 'This order has no items and cannot be cancelled.');
+      $paymentDetail = $order->paymentDetails->first();
+      $paymentMethod = $paymentDetail?->paymentMethod;
+      $isCod = false;
+
+      if ($paymentMethod) {
+        $methodName = strtolower(trim($paymentMethod->method_name));
+        $isCod = in_array($methodName, ['cash', 'cod', 'card on delivery']);
       }
 
-      // Ensure ALL items are Pending. If any item is not Pending, disallow and show toastr via session('warning')
-      $allPending = $order->items->every(function ($it) {
-        return (trim($it->order_item_status ?? '') === 'Pending');
-      });
+      if ($isCod || !$paymentDetail || !$paymentDetail->transaction_id || $paymentDetail->payment_status !== 'Paid') {
+        Log::info("Cancelling COD/Offline order #{$order->order_id} locally.");
 
-      if (! $allPending) {
-        DB::rollBack();
-        return redirect()->back()->with('warning', 'Order cannot be cancelled because one or more items are already being processed.');
-      }
+        $order->items()->update(['order_item_status' => 'Cancelled']);
+        if ($paymentDetail) {
+          $paymentDetail->update(['payment_status' => 'Cancelled']);
+        }
+      } else {
+        Log::info("Processing PayMongo refund for order #{$order->order_id}");
 
-      // All items are Pending => cancel them
-      OrderItem::where('order_id', $order->order_id)
-        ->where('order_item_status', 'Pending')
-        ->update(['order_item_status' => 'Cancelled', 'updated_at' => now()]);
+        $paymentIntentId = $paymentDetail->transaction_id;
+        $refundAmount = (int) round($order->total * 100);
+        $paymongoSecret = config('services.paymongo.secret');
 
-      // Update payment_details if exists -> set to 'Cancelled' (you can tweak logic if you only want to change when Pending)
-      if ($order->paymentDetails) {
-        $order->paymentDetails->update([
-          'payment_status' => 'Cancelled',
-          'updated_at' => now(),
+        Log::info("Retrieving Payment Intent {$paymentIntentId} to find payment_id");
+
+        $retrieveResponse = Http::withHeaders([
+          'accept' => 'application/json',
+          'authorization' => 'Basic ' . base64_encode($paymongoSecret . ':')
+        ])->get("https://api.paymongo.com/v1/payment_intents/{$paymentIntentId}");
+
+        $intentData = $retrieveResponse->json();
+
+        $paymentId = $intentData['data']['attributes']['payments'][0]['id'] ?? null;
+
+        if (!$paymentId) {
+          Log::error("Could not find a successful payment_id for Intent {$paymentIntentId}", ['response' => $intentData]);
+          throw new Exception('Could not find the associated charge for this order.');
+        }
+
+        Log::info("Found payment_id {$paymentId} for refund.");
+
+        $response = Http::withHeaders([
+          'accept' => 'application/json',
+          'content-type' => 'application/json',
+          'authorization' => 'Basic ' . base64_encode($paymongoSecret . ':')
+        ])->post('https://api.paymongo.com/v1/refunds', [
+          'data' => [
+            'attributes' => [
+              'amount' => $refundAmount,
+              'payment_id' => $paymentId,
+              'reason' => 'requested_by_customer'
+            ]
+          ]
         ]);
+
+        $responseData = $response->json();
+
+        if ($response->successful() && isset($responseData['data']['attributes']['status'])) {
+
+          Log::info("PayMongo refund successful for order #{$order->order_id}", ['response' => $responseData]);
+
+          $order->items()->update(['order_item_status' => 'Cancelled']);
+
+          $paymentDetail->update([
+            'payment_status' => 'Refunded',
+          ]);
+        } else {
+          Log::error("PayMongo refund FAILED for order #{$order->order_id}", ['response' => $responseData]);
+          throw new Exception('The payment gateway rejected the refund request. Please contact support.');
+        }
       }
 
-      // Update preorder record if exists
+      // [START] ADD PRE-ORDER CANCELLATION
       if ($order->preorderDetail) {
+        Log::info("Updating preorder_detail status to 'cancelled' for order #{$order->order_id}");
         $order->preorderDetail->update([
-          'preorder_status' => 'cancelled',
+          'preorder_status' => 'cancelled', // or 'Cancelled', whatever your status string is
           'updated_at' => now(),
         ]);
       }
 
-      // Touch the order to update updated_at (no new column required)
-      $order->touch();
+      // Notify the vendor that the customer (actor) cancelled this order.
+      try {
+        $order->load('business.vendor.user'); // Make sure relations are loaded
+
+        if ($order->business && $order->business->vendor && $order->business->vendor->user) {
+
+          $vendorUser = $order->business->vendor->user;
+          $customerUser = Auth::user(); // The customer who is cancelling
+          $notify = app(NotificationService::class);
+
+          // [START] DYNAMIC URL LOGIC
+          $vendorUrl = $order->preorderDetail
+            ? '/vendor/orders/preorder'
+            : '/vendor/orders/cart';
+          // [END] DYNAMIC URL LOGIC
+
+          $notify->createNotification([
+            'user_id'         => $vendorUser->user_id, // The Vendor (recipient)
+            'actor_user_id'   => $customerUser->user_id, // The Customer (actor)
+            'event_type'      => 'ORDER_CANCELLED_BY_CUSTOMER',
+            'reference_table' => 'orders, preorder',
+            'reference_id'    => $order->order_id,
+            'business_id'     => $order->business_id,
+            'recipient_role'  => 'vendor',
+            'payload' => [
+              'order_id'       => $order->order_id,
+              'title'          => "Order with id #{$order->order_id} Cancelled",
+              'excerpt'        => "The customer has cancelled order with id #{$order->order_id}.",
+              'status'         => 'Cancelled',
+              'url'            => $vendorUrl,
+            ]
+          ]);
+        } else {
+          Log::warning("Could not find vendor user to notify for order cancellation", [
+            'order_id' => $order->order_id
+          ]);
+        }
+      } catch (\Throwable $e) {
+        // IMPORTANT: Do NOT re-throw.
+        // We do not want a notification failure to roll back the cancellation.
+        Log::error('Failed to send order cancellation notification', [
+          'order_id' => $order->order_id,
+          'error' => $e->getMessage()
+        ]);
+      }
 
       DB::commit();
-
-      Log::info("Order {$order->order_id} cancelled by user {$user->user_id}");
-
-      return redirect()->back()->with('success', 'Your order has been cancelled successfully.');
-    } catch (\Exception $e) {
+      return redirect()->route('customer.orders.index')
+        ->with('success', 'Order has been successfully cancelled.')
+        ->header('Cache-Control', 'no-cache, no-store, must-revalidate') // HTTP 1.1.
+        ->header('Pragma', 'no-cache') // HTTP 1.0.
+        ->header('Expires', '0');
+    } catch (Exception $e) {
       DB::rollBack();
-      Log::error("Cancel order failed for order {$orderId}: " . $e->getMessage());
-      return redirect()->back()->with('error', 'Something went wrong while cancelling your order.');
+      Log::error("Failed to cancel order #{$order_id}", ['method' => __METHOD__, 'error' => $e->getMessage()]);
+      return back()->with('error', 'Failed to cancel order: ' . $e->getMessage());
     }
   }
 }

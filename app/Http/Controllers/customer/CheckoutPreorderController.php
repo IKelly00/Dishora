@@ -260,6 +260,7 @@ class CheckoutPreorderController extends Controller
         'original_payment_method_id' => $pmId,
         'totalAdvanceRequired' => $totalAdvanceRequired
       ]);
+    } else {
       $gcash = PaymentMethod::whereRaw('LOWER(method_name) = ?', ['gcash'])->first();
       if ($gcash) {
         $pmId = $gcash->payment_method_id;
@@ -595,6 +596,57 @@ class CheckoutPreorderController extends Controller
         ]);
       }
 
+      // [START] ADD NOTIFICATION
+      try {
+        $notify = app(\App\Services\NotificationService::class);
+
+        // 1. Notify Vendor
+        $order->load('business.vendor.user'); // Make sure relations are loaded
+        if ($order->business && $order->business->vendor && $order->business->vendor->user) {
+          $vendorUser = $order->business->vendor->user;
+          $notify->createNotification([
+            'user_id'         => $vendorUser->user_id, // Vendor (recipient)
+            'actor_user_id'   => $user->user_id,      // Customer (actor)
+            'event_type'      => 'PREORDER_CREATED',
+            'reference_table' => 'orders, preorder',
+            'reference_id'    => $order->order_id,
+            'business_id'     => $businessId,
+            'recipient_role'  => 'vendor',
+            'payload' => [
+              'order_id'       => $order->order_id,
+              'title'          => "New Pre-Order #{$order->order_id} (COD)",
+              'excerpt'        => "A customer placed a new pre-order (COD).",
+              'status'         => $preorderStatus ?? 'Pending', // Use status from PreOrder logic
+              'url'            => "/vendor/orders/preorder",
+            ]
+          ]);
+        }
+
+        // 2. Notify Customer
+        $notify->createNotification([
+          'user_id'         => $user->user_id,      // Customer (recipient)
+          'actor_user_id'   => $user->user_id,      // Customer (actor)
+          'event_type'      => 'PREORDER_CONFIRMED',
+          'reference_table' => 'orders, preorder',
+          'reference_id'    => $order->order_id,
+          'recipient_role'  => 'customer',
+          'payload' => [
+            'order_id'       => $order->order_id,
+            'title'          => "Your Pre-Order #{$order->order_id} is placed!",
+            'excerpt'        => "Thank you for your pre-order. It is pending confirmation.",
+            'status'         => $preorderStatus ?? 'Pending',
+            'url'            => "/customer/orders",
+          ]
+        ]);
+      } catch (\Throwable $e) {
+        // IMPORTANT: Do NOT re-throw. Log and continue.
+        Log::error('Failed to send pre-order (COD) notification', [
+          'order_id' => $order->order_id,
+          'error' => $e->getMessage()
+        ]);
+      }
+      // [END] ADD NOTIFICATION
+
       Log::info('COD order created from draft', ['method' => __METHOD__, 'order_id' => $order->order_id, 'draft_id' => $draft->checkout_draft_id]);
     });
   }
@@ -744,6 +796,63 @@ class CheckoutPreorderController extends Controller
       }
 
       $draft->update(['processed_at' => now()]);
+
+      // [START] ADD NOTIFICATION
+      try {
+        // We need the customer User model, which is on the draft
+        $customerUser = \App\Models\User::find($draft->user_id);
+        $notify = app(\App\Services\NotificationService::class);
+        $preorderStatus = $preorder->preorder_status ?? 'Pending';
+
+        // 1. Notify Vendor
+        $order->load('business.vendor.user');
+        if ($order->business && $order->business->vendor && $order->business->vendor->user) {
+          $vendorUser = $order->business->vendor->user;
+          $notify->createNotification([
+            'user_id'         => $vendorUser->user_id,         // Vendor (recipient)
+            'actor_user_id'   => $customerUser->user_id,      // Customer (actor)
+            'event_type'      => 'PREORDER_CREATED',
+            'reference_table' => 'orders, preorder',
+            'reference_id'    => $order->order_id,
+            'business_id'     => $businessId,
+            'recipient_role'  => 'vendor',
+            'payload' => [
+              'order_id'       => $order->order_id,
+              'title'          => "New Pre-Order #{$order->order_id} (Paid)",
+              'excerpt'        => "A customer placed and paid for a new pre-order.",
+              'status'         => $preorderStatus,
+              'url'            => "/vendor/orders/preorder",
+            ]
+          ]);
+        }
+
+        // 2. Notify Customer
+        if ($customerUser) {
+          $notify->createNotification([
+            'user_id'         => $customerUser->user_id,      // Customer (recipient)
+            'actor_user_id'   => $customerUser->user_id,      // Customer (actor)
+            'event_type'      => 'PREORDER_CONFIRMED',
+            'reference_table' => 'orders, preorder',
+            'reference_id'    => $order->order_id,
+            'recipient_role'  => 'customer',
+            'payload' => [
+              'order_id'       => $order->order_id,
+              'title'          => "Your Pre-Order #{$order->order_id} is confirmed!",
+              'excerpt'        => "Thank you for your payment. Your pre-order is confirmed.",
+              'status'         => $preorderStatus,
+              'url'            => "/customer/orders",
+            ]
+          ]);
+        }
+      } catch (\Throwable $e) {
+        // IMPORTANT: Do NOT re-throw. Log and continue.
+        Log::error('Failed to send pre-order (Online) notification', [
+          'order_id' => $order->order_id,
+          'error' => $e->getMessage()
+        ]);
+      }
+      // [END] ADD NOTIFICATION
+
       Log::info('Online order created from draft', ['method' => __METHOD__, 'order_id' => $order->order_id, 'draft_id' => $draft->checkout_draft_id]);
     });
   }
@@ -976,6 +1085,42 @@ class CheckoutPreorderController extends Controller
         'removed_product_ids' => $productIds
       ]);
     }
+
+    // [START] ADD NOTIFICATION
+    // Notify the vendor that a receipt has been uploaded for verification
+    try {
+      $notify = app(\App\Services\NotificationService::class);
+
+      // We already have $order and $user (customer)
+      $order->load('business.vendor.user');
+
+      if ($order->business && $order->business->vendor && $order->business->vendor->user) {
+        $vendorUser = $order->business->vendor->user;
+        $notify->createNotification([
+          'user_id'         => $vendorUser->user_id,     // Vendor (recipient)
+          'actor_user_id'   => $user->user_id,           // Customer (actor)
+          'event_type'      => 'RECEIPT_UPLOADED',
+          'reference_table' => 'orders, preorder',
+          'reference_id'    => $order->order_id,
+          'business_id'     => $order->business_id,
+          'recipient_role'  => 'vendor',
+          'payload' => [
+            'order_id'       => $order->order_id,
+            'title'          => "Receipt Uploaded for Pre-Order #{$order->order_id}",
+            'excerpt'        => "A customer has uploaded a receipt for verification.",
+            'status'         => 'Receipt Uploaded',
+            'url'            => "/vendor/orders/preorder",
+          ]
+        ]);
+      }
+    } catch (\Throwable $e) {
+      // IMPORTANT: Do NOT re-throw.
+      Log::error('Failed to send receipt upload notification', [
+        'order_id' => $order->order_id,
+        'error' => $e->getMessage()
+      ]);
+    }
+    // [END] ADD NOTIFICATION
 
     return redirect()->route('customer.orders.index')
       ->with('success', 'Receipt uploaded! Your preorder is now pending vendor verification.')

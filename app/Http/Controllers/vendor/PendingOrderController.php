@@ -7,6 +7,7 @@ use App\Models\{Order, Vendor, OrderItem, PaymentDetail};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Log, DB};
 use Carbon\Carbon;
+use App\Services\NotificationService;
 
 class PendingOrderController extends Controller
 {
@@ -216,6 +217,7 @@ class PendingOrderController extends Controller
 
     try {
       DB::beginTransaction();
+      $notify = app(NotificationService::class);
 
       if ($order) {
         // it's an order id — ensure vendor has access to this business
@@ -238,7 +240,6 @@ class PendingOrderController extends Controller
           'vendor_id' => $vendor?->vendor_id ?? null,
         ]);
 
-        // === START FIX 1 ===
         // If the order status has been set to Completed, update payment
         if (strtolower($newStatus) === 'completed') {
 
@@ -256,7 +257,36 @@ class PendingOrderController extends Controller
             'order_id' => $order->order_id,
           ]);
         }
-        // === END FIX 1 ===
+
+        $actorUserId = Auth::id();
+
+        // [START] SAFE NOTIFICATION
+        try {
+          $notify->createNotification([
+            'user_id' => $order->user_id,
+            'actor_user_id' => $actorUserId,
+            'event_type' => 'ORDER_STATUS_CHANGED',
+            'reference_table' => 'orders',
+            'reference_id' => $order->order_id,
+            'business_id' => $order->business_id,
+            'recipient_role' => 'customer',
+            'is_global' => false,
+            'payload' => [
+              'order_id' => $order->order_id,
+              'title' => "Your order with Id #{$order->order_id} status has changed to {$newStatus}",
+              'excerpt' => "Status: {$newStatus}",
+              'status' => $newStatus,
+              'url' => "/customer/orders",
+            ],
+          ]);
+        } catch (\Throwable $e) {
+          // Do NOT re-throw. Log the error and continue.
+          Log::error('Failed to send order status notification', [
+            'order_id' => $order->order_id,
+            'error' => $e->getMessage()
+          ]);
+        }
+        // [END] SAFE NOTIFICATION
 
         DB::commit();
 
@@ -301,7 +331,6 @@ class PendingOrderController extends Controller
             ->exists();
 
           if (!$hasPending && $orderOfItem) { // Check if all items are done AND we have the parent order
-            // === START FIX 2 ===
             PaymentDetail::updateOrCreate(
               ['order_id' => $orderOfItem->order_id], // Find by order_id
               [
@@ -315,14 +344,45 @@ class PendingOrderController extends Controller
             Log::info('Marked payment as Paid because all order items finished', [
               'order_id' => $orderOfItem->order_id,
             ]);
-            // === END FIX 2 ===
-
           } else {
             Log::info('Not all order items are completed; skipping payment update', [
               'order_id' => $orderItem->order_id,
             ]);
           }
         }
+
+        $actorUserId = Auth::id();
+
+        // [START] SAFE NOTIFICATION
+        try {
+          // Note: $order is not defined here, we have $orderOfItem
+          if ($orderOfItem) {
+            $notify->createNotification([
+              'user_id' => $orderOfItem->user_id, // Use the parent order
+              'actor_user_id' => $actorUserId,
+              'event_type' => 'ORDER_STATUS_CHANGED',
+              'reference_table' => 'orders',
+              'reference_id' => $orderOfItem->order_id,
+              'business_id' => $orderOfItem->business_id,
+              'recipient_role' => 'customer',
+              'is_global' => false,
+              'payload' => [
+                'order_id' => $orderOfItem->order_id,
+                'title' => "Your order with Id #{$orderOfItem->order_id} status has changed to {$newStatus}",
+                'excerpt' => "Status: {$newStatus}",
+                'status' => $newStatus,
+                'url' => "/customer/orders",
+              ],
+            ]);
+          }
+        } catch (\Throwable $e) {
+          // Do NOT re-throw. Log the error and continue.
+          Log::error('Failed to send order item status notification', [
+            'order_item_id' => $orderItem->order_item_id,
+            'error' => $e->getMessage()
+          ]);
+        }
+        // [END] SAFE NOTIFICATION
 
         DB::commit();
 

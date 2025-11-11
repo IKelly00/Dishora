@@ -111,4 +111,19 @@ class User extends Authenticatable implements MustVerifyEmail
   {
     return $this->hasOne(Vendor::class, 'user_id', 'user_id');
   }
+
+  public function notifications()
+  {
+    return $this->hasMany(\App\Models\Notification::class, 'user_id', 'user_id');
+  }
+
+  public function deviceTokens()
+  {
+    return $this->hasMany(\App\Models\DeviceToken::class, 'user_id', 'user_id');
+  }
+
+  public function notificationPreferences()
+  {
+    return $this->hasMany(\App\Models\NotificationPreference::class, 'user_id', 'user_id');
+  }
 }

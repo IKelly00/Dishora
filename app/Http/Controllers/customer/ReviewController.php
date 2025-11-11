@@ -4,14 +4,20 @@ namespace App\Http\Controllers\customer;
 
 use App\Http\Controllers\Controller;
 use App\Models\Review;
+use App\Models\Customer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;           // For structured logging
+use App\Services\NotificationService;         // For dispatching in-app notifications
 
 class ReviewController extends Controller
 {
+  /**
+   * Return all reviews for a business (newest first).
+   */
   public function index($business_id)
   {
-    $reviews = \App\Models\Review::with(['customer.user'])
+    $reviews = Review::with(['customer.user'])
       ->where('business_id', $business_id)
       ->latest()
       ->get();
@@ -20,7 +26,9 @@ class ReviewController extends Controller
   }
 
   /**
-   * Store a new review (feedback) for a business.
+   * Store a new review for a business.
+   * - Validates input and creates the review under the authenticated customer.
+   * - Attempts to notify the vendor; notification failures are logged and do not block.
    */
   public function store(Request $request)
   {
@@ -30,8 +38,7 @@ class ReviewController extends Controller
       'comment'     => 'nullable|string|max:1000',
     ]);
 
-    // Get the authenticated user's customer record
-    $customer = \App\Models\Customer::where('user_id', Auth::id())->firstOrFail();
+    $customer = Customer::where('user_id', Auth::id())->firstOrFail();
 
     $review = Review::create([
       'customer_id' => $customer->customer_id,
@@ -39,7 +46,49 @@ class ReviewController extends Controller
       'rating'      => $validated['rating'],
       'comment'     => $validated['comment'] ?? null,
     ]);
-    // For AJAX form submissions, return JSON
+
+    // Try to notify the vendor of the new review; do not interrupt if it fails.
+    try {
+      $review->load('business.vendor.user');
+
+      if (
+        $review->business &&
+        $review->business->vendor &&
+        $review->business->vendor->user
+      ) {
+        $vendorUser   = $review->business->vendor->user;
+        $customerUser = Auth::user();
+        $notify       = app(NotificationService::class);
+
+        $notify->createNotification([
+          'user_id'         => $vendorUser->user_id,
+          'actor_user_id'   => $customerUser->user_id,
+          'event_type'      => 'NEW_REVIEW',
+          'reference_table' => 'reviews',
+          'reference_id'    => $review->review_id,
+          'business_id'     => $review->business_id,
+          'recipient_role'  => 'vendor',
+          'payload'         => [
+            'title'         => "You have a new {$review->rating}-star review!",
+            'excerpt'       => "{$customerUser->fullname} left a review for your business.",
+            'rating'        => $review->rating,
+            'customer_name' => $customerUser->fullname,
+            'url'           => '/vendor/feedback',
+          ],
+        ]);
+      } else {
+        Log::warning('[ReviewController] Vendor user not found for review notification', [
+          'review_id'   => $review->review_id,
+          'business_id' => $review->business_id,
+        ]);
+      }
+    } catch (\Throwable $e) {
+      Log::error('[ReviewController] Failed to send review notification', [
+        'error'     => $e->getMessage(),
+        'review_id' => $review->review_id ?? null,
+      ]);
+    }
+
     if ($request->expectsJson()) {
       return response()->json([
         'message' => 'Thanks for your feedback!',
@@ -47,7 +96,6 @@ class ReviewController extends Controller
       ], 201);
     }
 
-    // Otherwise redirect back (for non‑AJAX calls)
     return redirect()->back()->with('success', 'Thanks for your feedback!');
   }
 }

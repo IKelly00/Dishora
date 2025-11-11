@@ -130,9 +130,8 @@
                             @forelse ($conversations as $convo)
                                 <a href="#"
                                     class="list-group-item list-group-item-action d-flex justify-content-between align-items-center convo-item p-3"
-                                    {{-- These are the DATA ATTRIBUTES from your CUSTOMER javascript --}} data-business-id="{{ $convo->business_id }}"
-                                    data-receiver-id="{{ $convo->vendor_user_id }}"
-                                    data-business-name="{{ $convo->business_name }}"
+                                    {{-- These are the DATA ATTRIBUTES from your CUSTOMER javascript --}} data-business-id="{{ $convo->business_id }}" {{-- data-receiver-id="{{ $convo->vendor_user_id }}" --}}
+                                    {{-- <-- We don't need this --}} data-business-name="{{ $convo->business_name }}"
                                     data-business-image="{{ $convo->business_image_url ?? secure_asset('images/no-image.jpg') }}">
 
                                     {{-- This is the CONTENT from your CUSTOMER blade (showing business info) --}}
@@ -143,7 +142,8 @@
                                     <div class="ms-2 me-auto" style="min-width: 0;">
                                         <div class="fw-semibold text-dark text-truncate">{{ $convo->business_name }}</div>
                                         <small class="text-muted text-truncate d-block">
-                                            {{ $convo->last_message_preview ?? 'Click to open chat' }}
+                                            {{-- Use the last_message object's text --}}
+                                            {{ $convo->last_message?->message_text ?? 'Click to open chat' }}
                                         </small>
                                     </div>
 
@@ -184,7 +184,7 @@
                             <form id="sendMessageForm"> {{-- ID matches CUSTOMER JS --}}
                                 @csrf
                                 <input type="hidden" id="chat_business_id" name="business_id">
-                                <input type="hidden" id="chat_receiver_id" name="receiver_id">
+                                {{-- <input type="hidden" id="chat_receiver_id" name="receiver_id"> --}} {{-- <-- We don't need this --}}
                                 <div class="input-group">
                                     <input type="text" id="chat_message_text" name="message_text"
                                         class="form-control border-0 py-3 px-3" placeholder="Type your reply..." required
@@ -206,14 +206,13 @@
 
 
 @push('page-script')
-    {{-- This is your original, unchanged CUSTOMER JAVASCRIPT --}}
     <script>
         $(document).ready(function() {
 
             // --- Global Vars ---
             const currentUserId = {{ auth()->id() ?? 'null' }};
             let currentBusinessId = null;
-            let currentReceiverId = null;
+            // let currentReceiverId = null; // <-- We only need currentBusinessId
             let pusher = null;
             let channel = null;
 
@@ -229,28 +228,41 @@
 
             // --- Helper function to append a single message ---
             function appendMessage(message) {
-                if (!message || typeof message.sender_id === 'undefined') {
+                if (!message || typeof message.sender_role === 'undefined') { // <-- Check for role
                     console.error("Invalid message object received:", message);
                     return;
                 }
-                const isSender = message.sender_id == currentUserId;
+
+                // --- THIS IS THE FIX ---
+                // We check the ROLE, not the sender_id.
+                // If the sender's role is 'customer', it's "You".
+                const isSender = message.sender_role === 'customer';
+                // --- END FIX ---
+
                 const alignClass = isSender ? 'text-end' : 'text-start';
 
-                let senderName = 'Business';
+                // --- FIX FOR SENDER NAME ---
+                let senderName = '';
                 if (isSender) {
                     senderName = 'You';
                 } else {
-                    senderName = $chatHeaderName.text() || 'Business';
+                    // Use the sender's name from the object (e.g., "Joms Cuisine")
+                    if (message.sender && (message.sender.business_name || message.sender.fullname)) {
+                        senderName = message.sender.business_name || message.sender.fullname;
+                    } else {
+                        senderName = $chatHeaderName.text(); // Fallback to header
+                    }
                 }
+                // --- END FIX ---
 
                 const messageHtml = `
-          <div class="message-wrapper ${alignClass} mb-2" data-message-id="${message.message_id || ''}">
-              <small class="text-muted d-block mb-1">${senderName}</small>
-              <div class="message shadow-sm">
-                  ${message.message_text}
-              </div>
-          </div>
-        `;
+                    <div class="message-wrapper ${alignClass} mb-2" data-message-id="${message.message_id || ''}">
+                        <small class="text-muted d-block mb-1">${senderName}</small>
+                        <div class="message shadow-sm">
+                            ${message.message_text}
+                        </div>
+                    </div>
+                `;
                 $chatBox.append(messageHtml);
             }
 
@@ -262,10 +274,10 @@
             }
 
             // --- Main Function: Load a Conversation Thread ---
-            function loadConversation(businessId, receiverId, businessName, businessImage) {
+            function loadConversation(businessId, businessName, businessImage) {
                 // 1. Set global vars
                 currentBusinessId = businessId;
-                currentReceiverId = receiverId;
+                // currentReceiverId = receiverId; // <-- Not needed
 
                 // 2. Update UI
                 $chatPlaceholder.hide();
@@ -276,7 +288,7 @@
                 $chatHeaderImage.attr('src', businessImage).show();
 
                 $('#chat_business_id').val(businessId);
-                $('#chat_receiver_id').val(receiverId);
+                // $('#chat_receiver_id').val(receiverId); // <-- Not needed
 
                 // 3. Highlight active conversation in sidebar
                 $('.convo-item').removeClass('active');
@@ -287,9 +299,12 @@
                 initializePusher(businessId);
 
                 // 5. Fetch messages (using your AJAX logic)
+                // --- AJAX URL FIX ---
+                // We call the correct route, which only needs the business_id
                 $.ajax({
-                    url: `/messages/show/${businessId}/${receiverId}`, // Your existing route
+                    url: `/customer/messages/thread/${businessId}`, // <-- Make sure this route exists
                     type: 'GET',
+                    // --- END AJAX URL FIX ---
                     success: function(messages) {
                         $chatBox.html('');
                         if (messages.length === 0) {
@@ -337,46 +352,46 @@
                     console.log(`Customer successfully subscribed to ${channelName}`);
                 });
 
+                // --- PUSHER FIX ---
                 channel.bind('App\\Events\\MessageSent', data => {
                     console.log("Customer Pusher received:", data);
                     const message = data.message;
 
-                    let cleanMessageText = message.message_text;
-                    if (cleanMessageText.startsWith('BIZ-')) {
-                        cleanMessageText = cleanMessageText.split(']').pop();
-                    }
+                    // 1. Is it a valid message?
+                    if (!message || !message.sender_role) return;
 
-                    // Update sidebar preview and badge if chat is NOT active
-                    if (message.sender_id != currentUserId && message.business_id != currentBusinessId) {
-                        const $convoItem = $(`.convo-item[data-business-id="${message.business_id}"]`);
-                        if ($convoItem.length) {
-                            $convoItem.find('small.text-muted').text(cleanMessageText.substring(0, 30) +
-                                '...');
-                            let $badge = $convoItem.find('.badge');
-                            if ($badge.length) {
-                                $badge.text(parseInt($badge.text()) + 1);
-                            } else {
-                                $convoItem.append(
-                                    '<span class="badge bg-warning text-dark rounded-pill align-self-center ms-2">1</span>'
-                                );
+                    // 2. Is this message FROM the business? (The only ones we care about)
+                    if (message.sender_role === 'business') {
+                        const messageBusinessId = message.sender_id;
+
+                        // 3. Is it for the currently OPEN chat?
+                        if (messageBusinessId == currentBusinessId) {
+                            // Append to chat window
+                            if ($(`#chat-box .message-wrapper[data-message-id="${message.message_id}"]`)
+                                .length === 0) {
+                                appendMessage(message);
+                                scrollToBottom();
+                            }
+                        } else {
+                            // 4. Not for the open chat, update sidebar
+                            const $convoItem = $(`.convo-item[data-business-id="${messageBusinessId}"]`);
+                            if ($convoItem.length) {
+                                $convoItem.find('small.text-muted').text(message.message_text.substring(0,
+                                    30) + '...');
+
+                                let $badge = $convoItem.find('.badge');
+                                if ($badge.length) {
+                                    $badge.text(parseInt($badge.text() || 0) + 1);
+                                } else {
+                                    $convoItem.append(
+                                        '<span class="badge bg-warning text-dark rounded-pill align-self-center ms-2">1</span>'
+                                    );
+                                }
                             }
                         }
                     }
-                    // Append to chat window ONLY if it's for the ACTIVE chat
-                    else if (message && message.sender_id != currentUserId && message.receiver_id ==
-                        currentUserId && message.business_id == currentBusinessId) {
-                        if ($(`#chat-box .message-wrapper[data-message-id="${message.message_id}"]`)
-                            .length === 0) {
-
-                            let messageToAppend = {
-                                ...message,
-                                message_text: cleanMessageText
-                            };
-                            appendMessage(messageToAppend);
-                            scrollToBottom();
-                        }
-                    }
                 });
+                // --- END PUSHER FIX ---
             }
 
             // --- Event Listener: Click on a Conversation ---
@@ -384,7 +399,7 @@
                 const $item = $(this);
                 loadConversation(
                     $item.data('business-id'),
-                    $item.data('receiver-id'),
+                    // $item.data('receiver-id'), // <-- Not needed
                     $item.data('business-name'),
                     $item.data('business-image')
                 );
@@ -394,34 +409,35 @@
             $sendMessageForm.on('submit', function(e) {
                 e.preventDefault();
                 var messageText = $('#chat_message_text').val();
-                if (messageText.trim() === '' || !currentReceiverId) return;
+                // --- FIX: Check currentBusinessId ---
+                if (messageText.trim() === '' || !currentBusinessId) return;
 
                 const $submitButton = $(this).find('button[type="submit"]');
                 const originalButtonHtml = $submitButton.html();
                 $submitButton.prop('disabled', true).text('Sending...');
 
                 $.ajax({
-                    url: '{{ route('customer.messages.send') }}',
+                    url: '{{ route('customer.messages.send') }}', // This route is correct
                     type: 'POST',
                     data: {
                         _token: '{{ csrf_token() }}',
-                        receiver_id: currentReceiverId,
-                        business_id: currentBusinessId,
+                        // receiver_id: currentReceiverId, // <-- Not needed
+                        business_id: currentBusinessId, // <-- This is what the controller needs
                         message_text: messageText,
                     },
                     success: function(message) {
                         $('#chat_message_text').val('');
                         $chatBox.find('.text-muted.p-5')
-                            .remove(); // Remove 'Start conversation' text
+                    .remove(); // Remove 'Start conversation' text
 
                         if ($(
-                                `#chat-box .message-wrapper[data-message-id="${message.message_id}"]`
-                            )
+                                `#chat-box .message-wrapper[data-message-id="${message.message_id}"]`)
                             .length === 0) {
                             appendMessage(message);
                         }
                         scrollToBottom();
 
+                        // Update sidebar preview
                         $(`.convo-item.active small.text-muted`).text(message.message_text
                             .substring(0, 30) + '...');
                     },
