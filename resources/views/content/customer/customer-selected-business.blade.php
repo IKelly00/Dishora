@@ -279,19 +279,503 @@
 
     <!-- Add/Preorder Success Modal (NEW: used instead of alert) -->
     <div class="modal fade" id="productAddedModal" tabindex="-1" aria-hidden="true">
-        <!-- ... (modal content is unchanged) ... -->
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content rounded-3 shadow border-0">
+
+                <!-- Modal Header -->
+                <div class="modal-header border-0 bg-white">
+                    <h6 class="modal-title fw-bold text-dark">Success</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body text-center p-4">
+                    <!-- Animated Success Check -->
+                    <div id="check-animation"
+                        class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
+                        style="width:80px; height:80px; background:#fff8eb;">
+                        <svg class="checkmark" viewBox="0 0 52 52">
+                            <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
+                            <path class="checkmark__check" fill="none" d="M14 27l7 7 16-16" />
+                        </svg>
+                    </div>
+
+                    <!-- Dynamic success message -->
+                    <div id="product-added-message" class="mb-3 fw-semibold text-dark small"></div>
+
+                    <a href="{{ route('customer.cart') }}" id="goCartBtn"
+                        class="btn btn-sm w-100 mb-2 btn-primary d-none">
+                        Go to Cart
+                    </a>
+                    <a href="{{ route('customer.preorder') }}" id="goPreorderBtn"
+                        class="btn btn-sm w-100 mb-2 btn-primary d-none">
+                        Go to Pre-orders
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Custom Styles -->
     <style>
-        /* ... (all your existing styles are perfect) ... */
+        .main-content-area {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 2rem;
+            box-shadow: 0 6px 20px rgba(14, 30, 37, 0.06);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            margin-bottom: 2rem;
+        }
+
+        .toggle-section {
+            border: 1px solid #f3f4f6;
+            border-radius: 10px;
+            padding: 1.5rem;
+            background: #fcfcfc
+        }
+
+        .btn-custom {
+            border: none;
+            border-radius: 20px;
+            padding: 6px 18px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .btn-custom.preorder {
+            background: #f6d99d;
+            color: #000;
+        }
+
+        .btn-custom.preorder:hover {
+            background: #f5c56f;
+        }
+
+        .btn-custom.addtocart {
+            background: #e9eef5;
+            color: #000;
+        }
+
+        .btn-custom.addtocart:hover {
+            background: #d6dee9;
+        }
+
+        .qty-box {
+            background: #f2f4f7;
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 14px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-qty {
+            border: none;
+            background: #e9eef5;
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
+            font-weight: bold;
+            color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s;
+        }
+
+        .btn-qty:hover {
+            background: #cfd6e0;
+        }
+
+        .btn-qty:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .disabled-box {
+            opacity: 0.5;
+            cursor: not-allowed !important;
+        }
+
+        .opening-hours-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 6px 20px;
+        }
+
+        .opening-hours-grid div {
+            font-size: 0.9rem;
+        }
+
+        #feedbackModal .form-control,
+        #feedbackModal .form-select {
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 0.95rem;
+        }
+
+        .modal-header.bg-warning {
+            background: linear-gradient(90deg, #f6d365, #fda085);
+        }
+
+        /* Feedback */
+        .empty-feedback-state {
+            background: linear-gradient(180deg, #fff, #fafafa);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.04);
+            transition: all 0.3s ease;
+        }
+
+        .empty-feedback-state:hover {
+            transform: scale(1.01);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+        }
+
+        .empty-feedback-state i {
+            display: inline-block;
+            padding: 0.7rem;
+            background: rgba(255, 193, 7, 0.15);
+            border-radius: 50%;
+        }
+
+        #feedbackSection h4 {
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        #feedbackSection button.btn-warning {
+            background: #f6d365;
+            border: none;
+            transition: 0.2s ease-in-out;
+        }
+
+        #feedbackSection button.btn-warning:hover {
+            background: #f5c56f;
+        }
+
+        /* Location and opening hrs */
+        /* Larger, more elegant logo */
+        .col-md-3 img {
+            width: 170px !important;
+            height: 170px !important;
+            border: 5px solid #fff;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        /* soften small box shadow used in hours */
+        .shadow-sm-sm {
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04);
+        }
+
+        /* gentle lift on hover */
+        .hover-lift {
+            transition: all 0.2s ease;
+        }
+
+        .hover-lift:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+        }
+
+        /* fine gradient background for subtle tone */
+        .bg-light-subtle {
+            background: linear-gradient(180deg, #fff, #fcfcfc);
+        }
+
+        /* Logo */
+        .business-logo-wrapper {
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(145deg, #fff, #f8f9fa);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid #fff;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+        }
+
+        .business-logo-wrapper:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .business-logo {
+            width: 150px;
+            height: 150px;
+            object-fit: contain;
+        }
+
+        @media (max-width: 768px) {
+            .business-logo-wrapper {
+                width: 150px;
+                height: 150px;
+            }
+
+            .business-logo {
+                width: 120px;
+                height: 120px;
+            }
+        }
+
+        /* Checkmark animation styles used by modal */
+        .checkmark {
+            width: 50px;
+            height: 50px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            display: block;
+        }
+
+        .checkmark__circle {
+            stroke: #f59e0b;
+            stroke-dasharray: 166;
+            stroke-dashoffset: 166;
+            stroke-width: 4;
+        }
+
+        .checkmark__check {
+            stroke: #f59e0b;
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+            stroke-width: 6;
+        }
+
+        .animate .checkmark__circle {
+            animation: circle 0.6s ease-out forwards;
+        }
+
+        .animate .checkmark__check {
+            animation: check 0.3s ease-out 0.6s forwards;
+        }
+
+        @keyframes circle {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        @keyframes check {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
     </style>
 
     @push('page-script')
         <script>
             // This script is for quantity/cart/feedback (Vanilla JS)
             document.addEventListener('DOMContentLoaded', function() {
-                // ... (all your existing DOMContentLoaded JS is correct and unchanged) ...
+                // Handle quantity changes
+                document.querySelectorAll('.qty-box').forEach(function(box) {
+                    const minusBtn = box.querySelector('.btn-qty:first-child');
+                    const plusBtn = box.querySelector('.btn-qty:last-child');
+                    const qtySpan = box.querySelector('span');
+
+                    // Skip logic if buttons are disabled
+                    if (minusBtn.disabled || plusBtn.disabled) return;
+
+                    const card = box.closest('.card');
+                    const addBtn = card.querySelector('.addtocart');
+                    const preorderBtn = card.querySelector('.preorder');
+
+                    let qty = parseInt(qtySpan.textContent, 10);
+
+                    minusBtn.addEventListener('click', function() {
+                        if (qty > 1) {
+                            qty--;
+                            qtySpan.textContent = qty;
+                            if (addBtn) addBtn.dataset.qty = qty;
+                            if (preorderBtn) preorderBtn.dataset.qty = qty;
+                        }
+                    });
+
+                    plusBtn.addEventListener('click', function() {
+                        qty++;
+                        qtySpan.textContent = qty;
+                        if (addBtn) addBtn.dataset.qty = qty;
+                        if (preorderBtn) preorderBtn.dataset.qty = qty;
+                    });
+                });
+
+                // Handle Add to Cart / Pre-order clicks
+                document.querySelectorAll('.addtocart, .preorder').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const productId = parseInt(this.dataset.id, 10);
+                        const qty = parseInt(this.dataset.qty || 1, 10);
+
+                        let url = '';
+                        const isPreorder = this.classList.contains('preorder');
+                        if (isPreorder) {
+                            url = '{{ route('preorder.add') }}';
+                        } else {
+                            url = '{{ route('cart.add') }}';
+                        }
+
+                        fetch(url, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector(
+                                        'meta[name="csrf-token"]').content
+                                },
+                                body: JSON.stringify({
+                                    product_id: productId,
+                                    quantity: qty
+                                })
+                            })
+                            .then(async res => {
+                                const contentType = res.headers.get('content-type');
+                                if (contentType && contentType.includes('application/json')) {
+                                    const data = await res.json();
+
+                                    // --- Instead of alert, show modal ---
+                                    const msgEl = document.getElementById(
+                                        'product-added-message');
+                                    msgEl.textContent =
+                                        `${data.product_name} (x${data.quantity}) added to ${isPreorder ? 'Pre-orders' : 'Cart'}`;
+
+                                    // Show/hide the appropriate go buttons
+                                    document.getElementById('goCartBtn').classList.toggle(
+                                        'd-none', isPreorder);
+                                    document.getElementById('goPreorderBtn').classList.toggle(
+                                        'd-none', !isPreorder);
+
+                                    // animate check
+                                    const checkWrapper = document.getElementById(
+                                        'check-animation');
+                                    checkWrapper.classList.remove('animate');
+                                    void checkWrapper.offsetWidth; // force reflow
+                                    checkWrapper.classList.add('animate');
+
+                                    // show modal
+                                    const modal = new bootstrap.Modal(document.getElementById(
+                                        'productAddedModal'));
+                                    modal.show();
+                                } else {
+                                    const text = await res.text();
+                                    console.error('Unexpected response:', text);
+                                    // Fallback: show simple browser alert if response isn't json
+                                    alert('Something went wrong. Please try again.');
+                                }
+                            })
+                            .catch(err => {
+                                console.error(err);
+                                alert('Failed to add item. Please try again.');
+                            });
+                    });
+                });
+
+
+                // Toggle Menu and Feedback
+                const toggleBtn = document.getElementById('toggleSectionBtn');
+                const menuSection = document.getElementById('menuSection');
+                const feedbackSection = document.getElementById('feedbackSection');
+                const feedbackList = document.getElementById('feedbackList');
+                const businessId = {{ $business->business_id }};
+
+                toggleBtn.addEventListener('click', async function() {
+                    const current = toggleBtn.dataset.section;
+
+                    if (current === 'menu') {
+                        // Switch to feedback view
+                        menuSection.style.display = 'none';
+                        feedbackSection.style.display = 'block';
+                        toggleBtn.textContent = 'Menu';
+                        toggleBtn.dataset.section = 'feedback';
+
+                        // Fetch feedbacks
+                        const res = await fetch(`{{ url('/feedback') }}/${businessId}`);
+                        if (res.ok) {
+                            const reviews = await res.json();
+                            renderFeedbackList(reviews);
+                        } else {
+                            feedbackList.innerHTML = '<p class="text-danger">Failed to load feedbacks.</p>';
+                        }
+                    } else {
+                        // Back to menu view
+                        menuSection.style.display = 'block';
+                        feedbackSection.style.display = 'none';
+                        toggleBtn.textContent = 'Feedback';
+                        toggleBtn.dataset.section = 'menu';
+                    }
+                });
+
+                function renderFeedbackList(reviews) {
+                    if (!reviews.length) {
+                        feedbackList.innerHTML = `
+                            <div class="empty-feedback-state text-center p-5 rounded-4 border bg-white shadow-sm">
+                              <div class="mb-2">
+                                <i class='bx bxs-message-rounded-dots text-warning' style="font-size: 2rem;"></i>
+                              </div>
+                              <h6 class="fw-semibold text-dark mb-1">No Feedback Yet</h6>
+                              <p class="text-muted mb-0">Be the first to share your thoughts about this business!</p>
+                            </div>
+                          `;
+                        return;
+                    }
+
+                    feedbackList.innerHTML = reviews.map(r => `
+                    <div class="feedback-item p-3 mb-3 bg-white border rounded-3 shadow-sm">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <strong>${r.customer?.user?.fullname ?? 'Anonymous'}</strong>
+                        <span class="text-warning small">${'⭐'.repeat(r.rating)}</span>
+                      </div>
+                      <p class="mb-1 text-secondary">${r.comment || ''}</p>
+                      <small class="text-muted">${new Date(r.created_at).toLocaleString()}</small>
+                    </div>
+                  `).join('');
+                }
+
+
+                // Feedback modal
+                const confirmSubmitBtn = document.getElementById('confirmSubmitBtn');
+                const finalSubmitBtn = document.getElementById('finalSubmitBtn');
+                const feedbackForm = document.getElementById('feedbackForm');
+                let feedbackModalInstance, confirmModalInstance;
+
+                confirmSubmitBtn.addEventListener('click', () => {
+                    feedbackModalInstance = bootstrap.Modal.getInstance(document.getElementById(
+                        'feedbackModal'));
+                    confirmModalInstance = new bootstrap.Modal(document.getElementById('feedbackConfirmModal'));
+                    feedbackModalInstance.hide();
+                    confirmModalInstance.show();
+                });
+
+                finalSubmitBtn.addEventListener('click', async () => {
+                    confirmModalInstance.hide();
+
+                    const formData = new FormData(feedbackForm);
+                    const response = await fetch('{{ route('feedback.store') }}', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')
+                                .content,
+                            'Accept': 'application/json'
+                        },
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+
+                        // Reset and hide modal
+                        feedbackForm.reset();
+                        if (feedbackModalInstance) feedbackModalInstance.hide();
+
+                        // Optionally reload feedback list if user is viewing feedbacks
+                        if (document.getElementById('feedbackSection').style.display === 'block') {
+                            const res = await fetch(
+                                `{{ url('/feedback') }}/${formData.get('business_id')}`);
+                            const reviews = await res.json();
+                            renderFeedbackList(reviews);
+                        }
+                    } else {
+                        const err = await response.json();
+                        alert(err.message || 'Error submitting feedback');
+                    }
+                });
             });
 
             // This script is for the Message Modal (jQuery)
@@ -310,10 +794,8 @@
                         return;
                     }
 
-                    // --- THIS IS THE FIX ---
                     // Check the ROLE, not the ID.
                     const isSender = message.sender_role == 'customer';
-                    // --- END FIX ---
 
                     const alignClass = isSender ? 'text-end' : 'text-start';
                     const messageBgColor = isSender ? '#fff0d9' : '#f1f1f1';
@@ -363,22 +845,22 @@
                                 cluster: "{{ config('broadcasting.connections.pusher.options.cluster') }}",
                                 forceTLS: true
                             });
-                            console.log("Customer Pusher initialized.");
+                            //console.log("Customer Pusher initialized.");
                         } catch (e) {
-                            console.error("Failed to initialize Pusher:", e);
+                            //console.error("Failed to initialize Pusher:", e);
                             return; // Don't proceed if Pusher fails
                         }
                     }
 
                     const channelName = `chat.business.${businessId}`;
                     channel = pusher.subscribe(channelName);
-                    console.log(`Customer subscribing to ${channelName}`);
+                    //console.log(`Customer subscribing to ${channelName}`);
 
                     channel.bind('pusher:subscription_succeeded', () => {
-                        console.log(`Customer successfully subscribed to ${channelName}`);
+                        ///console.log(`Customer successfully subscribed to ${channelName}`);
                     });
                     channel.bind('pusher:subscription_error', (status) => {
-                        console.error(`Customer failed to subscribe to ${channelName}:`, status);
+                        //console.error(`Customer failed to subscribe to ${channelName}:`, status);
                     });
 
                     // --- PUSHER LOGIC FIX ---
@@ -489,7 +971,8 @@
                             $('#chat-placeholder').remove();
 
                             if ($(
-                                    `#chat-box .message-wrapper[data-message-id="${message.message_id}"]`)
+                                    `#chat-box .message-wrapper[data-message-id="${message.message_id}"]`
+                                )
                                 .length === 0) {
                                 appendMessage(message); // Use the single defined function
                             }
