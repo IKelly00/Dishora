@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Vendor;
 use Illuminate\Support\Facades\{DB, Log};
+use Carbon\Carbon;
 
 class SuperAdminVendorController extends Controller
 {
@@ -59,10 +60,29 @@ class SuperAdminVendorController extends Controller
    */
   public function approveRegistration($id)
   {
+    DB::transaction(function () use ($id) {
+
+     // 1. Find and update the vendor
     $vendor = Vendor::findOrFail($id);
     $vendor->registration_status = 'Approved';
     $vendor->save();
 
+    // 2. Create the payload for the notification
+    $title = "Your registration is approved!";
+    $body = "Congratulations! You can now start selling on Dishora.";
+    $payload = json_encode(['title' => $title, 'message' => $body]);
+
+    // 3. Create the persistent In-App Notification
+    DB::table('notifications')->insert([
+    'user_id' => $vendor->user_id, // This is the critical link!
+    'event_type' => 'VENDOR_APPROVED',
+    'payload' => $payload,
+    'is_read' => false,
+    'channel' => 'IN_APP',
+    'created_at' => Carbon::now(),
+    // 'updated_at' => Carbon::now()
+    ]);
+   });    
     // Return JSON response for AJAX
     return response()->json(['status' => 'Approved', 'message' => 'Vendor registration approved successfully.']);
   }
@@ -72,12 +92,30 @@ class SuperAdminVendorController extends Controller
    */
   public function rejectRegistration(Request $request, $id)
   {
+    DB::transaction(function () use ($request, $id) {
+
     $vendor = Vendor::findOrFail($id);
     $vendor->registration_status = 'Rejected';
     // Optionally save the reason if you add a 'remarks' column to vendors table
     // $vendor->remarks = $request->input('reason');
     $vendor->save();
 
+    // 2. Create the payload for the notification
+    $title = "Your registration update";
+    $body = "Unfortunately, your vendor registration was not approved at this time.";
+    $payload = json_encode(['title' => $title, 'message' => $body]);
+
+    // 3. Create the persistent In-App Notification
+    DB::table('notifications')->insert([
+        'user_id' => $vendor->user_id,
+        'event_type' => 'VENDOR_REJECTED',
+        'payload' => $payload,
+        'is_read' => false,
+        'channel' => 'IN_APP',
+        'created_at' => Carbon::now(),
+        // 'updated_at' => Carbon::now()
+    ]);
+   });
     // Return JSON response for AJAX
     return response()->json(['status' => 'Rejected', 'message' => 'Vendor registration rejected.']);
   }
