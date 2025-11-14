@@ -20,7 +20,7 @@ return new class extends Migration
       $table->string('comment', 255)->nullable();
       $table->timestamps();
 
-      $table->foreign('customer_id')->references('user_id')->on('users');
+      $table->foreign('customer_id')->references('customer_id')->on('customers');
       $table->foreign('business_id')->references('business_id')->on('business_details');
     });
   }
