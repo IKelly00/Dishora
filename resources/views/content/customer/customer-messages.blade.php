@@ -41,6 +41,12 @@
             overflow-y: auto;
         }
 
+        #conversation-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
         .message-wrapper {
             max-width: 85%;
             margin-bottom: 0.5rem;
@@ -120,7 +126,7 @@
             <div class="row g-3">
 
                 <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-3" style="min-height: 70vh;">
+                    <div class="card border-0 shadow-sm rounded-3 d-flex flex-column" style="height: 70vh;">
                         <div class="card-header convo-header-style fw-semibold">
                             Conversations
                         </div>
@@ -163,8 +169,7 @@
                 </div>
 
                 <div class="col-md-8">
-                    {{-- This card is a flex-column to make the footer stick to the bottom --}}
-                    <div class="card border-0 shadow-sm rounded-3 d-flex flex-column" style="min-height: 70vh;">
+                    <div class="card border-0 shadow-sm rounded-3 d-flex flex-column" style="height: 70vh;">
 
                         <div class="card-header chat-header-style fw-semibold d-flex align-items-center"
                             id="chat-header-wrapper">
@@ -428,10 +433,11 @@
                     success: function(message) {
                         $('#chat_message_text').val('');
                         $chatBox.find('.text-muted.p-5')
-                    .remove(); // Remove 'Start conversation' text
+                            .remove(); // Remove 'Start conversation' text
 
                         if ($(
-                                `#chat-box .message-wrapper[data-message-id="${message.message_id}"]`)
+                                `#chat-box .message-wrapper[data-message-id="${message.message_id}"]`
+                            )
                             .length === 0) {
                             appendMessage(message);
                         }
