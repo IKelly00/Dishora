@@ -98,6 +98,108 @@ class NotificationController extends Controller
     }
   }
 
+  public function viewAll(Request $request)
+  {
+    try {
+      $user = $request->user();
+      $role = session('active_role', 'customer');            // 'vendor' or 'customer'
+      $businessId = $request->query('business_id') ?? session('active_business_id');
+
+      Log::info('[notifications.index] start', [
+        'user_id' => $user?->user_id,
+        'role' => $role,
+        'business_id' => $businessId,
+        'query_params' => $request->all(),
+      ]);
+
+      // Start with rows targeted to the current user only
+      $query = Notification::where('user_id', $user->user_id);
+
+      // Role-specific filtering:
+      if ($role === 'vendor') {
+        $query->where(function ($q) use ($businessId) {
+          $q->where(function ($q2) use ($businessId) {
+            $q2->where('recipient_role', 'vendor');
+            if ($businessId) {
+              $q2->where('business_id', $businessId);
+            }
+          })
+            ->orWhere(function ($q3) {
+              $q3->where('is_global', true)
+                ->where(function ($qq) {
+                  $qq->whereNull('recipient_role')
+                    ->orWhere('recipient_role', 'vendor');
+                });
+            });
+        });
+      } else {
+        $query->where(function ($q) {
+          $q->where('recipient_role', 'customer')
+            ->orWhere(function ($q3) {
+              $q3->where('is_global', true)
+                ->where(function ($qq) {
+                  $qq->whereNull('recipient_role')
+                    ->orWhere('recipient_role', 'customer');
+                });
+            });
+        });
+      }
+
+      // Log the built query SQL and bindings (for debugging)
+      try {
+        Log::debug('[notifications.index] built query', [
+          'sql' => $query->toSql(),
+          'bindings' => $query->getBindings(),
+        ]);
+      } catch (\Throwable $e) {
+        Log::debug('[notifications.index] unable to get sql/bindings', ['err' => $e->getMessage()]);
+      }
+
+      $perPage = (int)$request->query('per_page', 10);
+      $notifications = $query->orderByDesc('created_at')->paginate($perPage);
+
+      // decode payload for client
+      $notifications->getCollection()->transform(function ($n) {
+        $n->payload = $n->payload ? json_decode($n->payload, true) : null;
+        return $n;
+      });
+
+      // Log the pagination result
+      Log::info('[notifications.index] result', [
+        'user_id' => $user->user_id,
+        'role' => $role,
+        'business_id' => $businessId,
+        'per_page' => $perPage,
+        'returned_count' => $notifications->count(),
+        'total' => $notifications->total ?? null,
+        'current_page' => $notifications->currentPage ?? null,
+        'last_page' => $notifications->lastPage ?? null,
+      ]);
+
+      // [START] === THIS IS THE FIX ===
+      // Check if the request is an AJAX call (expects JSON)
+      if ($request->expectsJson()) {
+        // This is for your dropdown script
+        return response()->json($notifications);
+      }
+
+      return view('layouts.sections.navbar.notifications-viewAll', [
+        'notifications' => $notifications
+      ]);
+    } catch (\Throwable $e) {
+      Log::error('[notifications.index] exception', [
+        'error' => $e->getMessage(),
+        'trace' => $e->getTraceAsString(),
+      ]);
+
+      // Handle both types of requests on error
+      if ($request->expectsJson()) {
+        return response()->json(['error' => 'Failed to fetch notifications'], 500);
+      }
+      return back()->with('error', 'Failed to fetch notifications');
+    }
+  }
+
   public function unreadCount(Request $request)
   {
     try {

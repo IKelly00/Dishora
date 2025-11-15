@@ -112,7 +112,7 @@
                     </div>
 
                     <div class="p-2 border-top small text-center">
-                        <a href="{{ route('notifications.index') }}" class="text-decoration-none">View all</a>
+                        <a href="{{ route('notifications.viewAll') }}" class="text-decoration-none">View all</a>
                     </div>
                 </div>
             </li>

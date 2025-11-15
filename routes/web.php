@@ -280,8 +280,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 // routes/web.php
 Route::middleware('auth')->group(function () {
-  // returns paginated notifications (uses NotificationController@index)
   Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+
+  // returns paginated notifications (uses NotificationController)
+  Route::get('/view-all-notifications', [NotificationController::class, 'viewAll'])->name('notifications.viewAll');
 
   // returns { unread: N } (NotificationController@unreadCount)
   Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread_count');
