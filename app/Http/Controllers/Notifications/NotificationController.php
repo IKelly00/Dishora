@@ -4,11 +4,93 @@ namespace App\Http\Controllers\Notifications;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\Notification;
-use Illuminate\Support\Facades\{DB, Log};
+use App\Services\VendorLocatorService;
+use App\Models\{Notification, Vendor};
+use Illuminate\Support\Facades\{DB, Log, Auth};
 
 class NotificationController extends Controller
 {
+
+  public function __construct(protected VendorLocatorService $locator) {}
+
+  private function getVendor(): ?Vendor
+  {
+    return Auth::user()?->vendor;
+  }
+
+  /**
+   * Resolve the active business and related status flags for a vendor.
+   */
+  private function resolveBusinessContext(Vendor $vendor): array
+  {
+    $vendorStatus = $vendor->registration_status ?? null;
+
+    $activeBusinessId = session('active_business_id');
+
+    // Auto-select first business if none chosen yet
+    if (!$activeBusinessId && $vendor->businessDetails()->exists()) {
+      $activeBusinessId = $vendor->businessDetails()
+        ->orderBy('business_id')
+        ->value('business_id');
+
+      session(['active_business_id' => $activeBusinessId]);
+      Log::info('Auto-selected first business', compact('activeBusinessId'));
+    }
+
+    $business = $vendor->businessDetails()
+      ->where('business_id', $activeBusinessId)
+      ->first();
+
+    $businessStatus = $business?->verification_status ?? 'Unknown';
+    $showVerificationModal = $businessStatus === 'Pending';
+
+    // Reset "vendor status modal shown" when status first becomes Pending
+    if ($vendorStatus === 'Pending' && session('last_vendor_status') !== 'Pending') {
+      session(['vendor_status_modal_shown' => false]);
+    }
+
+    session(['last_vendor_status' => $vendorStatus]);
+
+    if (!$business) {
+      Log::warning('Business not found for vendor', compact('activeBusinessId'));
+    } else {
+      Log::info('Resolved businessStatus', compact('businessStatus'));
+      Log::info('Show verification modal', compact('showVerificationModal'));
+      Log::info('Vendor Status Session', ['vendor_status_modal_shown' => session('vendor_status_modal_shown')]);
+    }
+
+    return [
+      'activeBusinessId'        => $activeBusinessId,
+      'businessStatus'          => $businessStatus,
+      'showVerificationModal'   => $showVerificationModal,
+      'vendorStatus'            => $vendorStatus,
+      'showVendorStatusModal'   => $vendorStatus === 'Pending',
+      'showVendorRejectedModal' => $vendorStatus === 'Rejected',
+    ];
+  }
+
+  /**
+   * Build base view data depending on whether the user has a vendor profile.
+   */
+  private function buildViewData(?Vendor $vendor, array $extra = []): array
+  {
+    if (!$vendor) {
+      return array_merge([
+        'hasVendorAccess'         => false,
+        'showRolePopup'           => true,
+        'vendorStatus'            => session('vendorStatus', null),
+        'showVendorStatusModal'   => session('vendorStatus') === 'Pending',
+        'showVendorRejectedModal' => session('vendorStatus') === 'Rejected',
+        'hasShownVendorModal'     => session('vendor_status_modal_shown', false),
+      ], $extra);
+    }
+
+    return array_merge([
+      'hasVendorAccess'     => $vendor->businessDetails()->exists(),
+      'showRolePopup'       => false,
+      'hasShownVendorModal' => session('vendor_status_modal_shown', false),
+    ], $this->resolveBusinessContext($vendor), $extra);
+  }
 
   public function index(Request $request)
   {
@@ -183,9 +265,11 @@ class NotificationController extends Controller
         return response()->json($notifications);
       }
 
-      return view('layouts.sections.navbar.notifications-viewAll', [
-        'notifications' => $notifications
-      ]);
+      $vendor   = $this->getVendor();
+
+      $viewData = $this->buildViewData($vendor, compact('notifications'));
+
+      return view('layouts.sections.navbar.notifications-viewAll', $viewData);
     } catch (\Throwable $e) {
       Log::error('[notifications.index] exception', [
         'error' => $e->getMessage(),
