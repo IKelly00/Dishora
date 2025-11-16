@@ -7,15 +7,17 @@
 @endphp
 
 @section('content')
-    <STYle>
+    <style>
         .main-content-area {
             background: #fff;
             border-radius: 10px;
             padding: 2rem;
             box-shadow: 0 2px 20px rgba(0, 0, 0, .08)
         }
-    </STYle>
+    </style>
 
+    {{-- Only if not already included in layout --}}
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.2.0/fonts/remixicon.css" rel="stylesheet">
 
     <div class="container py-5">
         <div class="main-content-area">
@@ -28,14 +30,38 @@
                                 <img src="{{ $vendor->business_image }}" class="img-fluid mb-2"
                                     alt="{{ $vendor->business_name }}" style="height: 100px; object-fit: contain;">
 
-                                <h6 class="fw-bold mb-4">
+                                <h6 class="fw-bold mb-1">
                                     {{ $vendor->business_name }} <br>
                                     <span class="badge text-muted ms-1">
                                         {{ $vendor->verification_status === 'Approved' ? 'Verified' : $vendor->verification_status }}
                                     </span>
                                 </h6>
 
-                                <!-- push button to bottom -->
+                                {{-- Rating --}}
+                                @php
+                                    $avgRating = $vendor->reviews_avg_rating;
+                                    $reviewsCount = $vendor->reviews_count;
+                                @endphp
+
+                                @if ($reviewsCount > 0)
+                                    <div class="mb-3 small">
+                                        @for ($i = 1; $i <= 5; $i++)
+                                            @if ($avgRating >= $i)
+                                                <i class="ri-star-fill text-warning"></i>
+                                            @elseif ($avgRating >= $i - 0.5)
+                                                <i class="ri-star-half-line text-warning"></i>
+                                            @else
+                                                <i class="ri-star-line text-warning"></i>
+                                            @endif
+                                        @endfor
+                                        <span class="text-muted">
+                                            {{ number_format($avgRating, 1) }} ({{ $reviewsCount }})
+                                        </span>
+                                    </div>
+                                @else
+                                    <div class="mb-3 small text-muted">No ratings yet</div>
+                                @endif
+
                                 <div class="mt-auto">
                                     <a href="{{ url('/customer/selected-business/' . Crypt::encryptString($vendor->business_id) . '/' . Crypt::encryptString($vendor->vendor_id)) }}"
                                         class="btn btn-primary w-100">

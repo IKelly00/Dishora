@@ -260,6 +260,8 @@ class CustomerMenuController extends Controller
     $vendors = BusinessDetail::with('products')
       ->where('verification_status', 'Approved')
       ->whereHas('products')
+      ->withAvg('reviews', 'rating')
+      ->withCount('reviews')
       ->get();
 
     $vendor = $this->getVendor();
