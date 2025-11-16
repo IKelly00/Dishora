@@ -95,6 +95,32 @@ class CustomerMenuController extends Controller
   }
 
   /**
+   * Product prep time
+   */
+  private function formatPrepTime(?int $minutes): ?string
+  {
+    if (!$minutes) {
+      return null; // no cutoff set
+    }
+
+    // Or: hours + mins (e.g. "1 hr 30 min")
+    if ($minutes < 60) {
+      return $minutes . ' min';
+    }
+
+    $hours = intdiv($minutes, 60);
+    $mins  = $minutes % 60;
+
+    if ($mins === 0) {
+      return $hours === 1 ? '1 hr' : "{$hours} hrs";
+    }
+
+    $hourPart = $hours === 1 ? '1 hr' : "{$hours} hrs";
+
+    return "{$hourPart} {$mins} min";
+  }
+
+  /**
    * Customer dashboard: nearby vendors, categories, past order products, deals.
    */
   public function index()
@@ -131,12 +157,22 @@ class CustomerMenuController extends Controller
       ->distinct()
       ->get();
 
+    // 🔹 Add prep_time_label so dashboard can show it too
+    foreach ($pastOrderProducts as $product) {
+      $product->prep_time_label = $this->formatPrepTime($product->cutoff_minutes);
+    }
+
     $deals = ProductCategory::all();
 
-    $viewData = $this->buildViewData($vendor, compact('vendors', 'categories', 'pastOrderProducts', 'deals'));
+    $viewData = $this->buildViewData(
+      $vendor,
+      compact('vendors', 'categories', 'pastOrderProducts', 'deals')
+    );
 
     return view('content.customer.customer-dashboard', $viewData);
   }
+
+
 
   /**
    * Filter to businesses that have at least one available product,
@@ -239,6 +275,11 @@ class CustomerMenuController extends Controller
 
     if ($business->products->isEmpty()) {
       abort(404, 'This business currently has no products set up.');
+    }
+
+    // Add prep_time_label to each product (for the badge)
+    foreach ($business->products as $product) {
+      $product->prep_time_label = $this->formatPrepTime($product->cutoff_minutes);
     }
 
     $data = [

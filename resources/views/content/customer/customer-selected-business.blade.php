@@ -118,6 +118,24 @@
                                                 Pre Order
                                             </span>
                                         @endif
+
+                                        {{-- Prep time badge (from cutoff_minutes) --}}
+                                        @if (!empty($item->prep_time_label))
+                                            <span class="position-absolute end-0 m-2 d-flex align-items-center gap-1"
+                                                style="
+                                                      top: 0;
+                                                      background: white;
+                                                      color: black;
+                                                      border-radius: 20px;
+                                                      padding: 3px 10px;
+                                                      font-size: 0.8rem;
+                                                      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                                                  ">
+                                                <i class="ri-time-line" style="font-size: 1rem;"></i>
+                                                {{ $item->prep_time_label }}
+                                            </span>
+                                        @endif
+
                                     </div>
 
                                     <!-- Card Body -->
