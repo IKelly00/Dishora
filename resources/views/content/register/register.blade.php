@@ -252,6 +252,13 @@
                                         <div id="password-feedback" class="invalid-feedback text-danger mt-1">
                                             Password must be at least 8 characters long.
                                         </div>
+                                        <div id="uppercase-feedback" class="invalid-feedback text-danger mt-1" style="display:none;">
+                                            Password must contain at least 1 uppercase letter.
+                                        </div>
+
+                                        <div id="special-feedback" class="invalid-feedback text-danger mt-1" style="display:none;">
+                                            Password must contain at least 1 special character (!@#$%^&* etc.).
+                                        </div>
                                     </div>
 
                                     <div class="mb-3">
@@ -298,45 +305,64 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const password = document.getElementById('password');
-            const confirmPassword = document.getElementById('password_confirmation');
-            const passwordFeedback = document.getElementById('password-feedback');
-            const confirmFeedback = document.getElementById('confirm-feedback');
-            const form = document.getElementById('registerForm');
+document.addEventListener('DOMContentLoaded', function() {
+    const password = document.getElementById('password');
+    const confirmPassword = document.getElementById('password_confirmation');
 
-            function checkPasswordLength() {
-                passwordFeedback.style.display = password.value.length < 8 ? 'block' : 'none';
-            }
+    const passwordFeedback = document.getElementById('password-feedback');
+    const uppercaseFeedback = document.getElementById('uppercase-feedback');
+    const specialFeedback = document.getElementById('special-feedback');
+    const confirmFeedback = document.getElementById('confirm-feedback');
 
-            function checkPasswordMatch() {
-                confirmFeedback.style.display = (confirmPassword.value && password.value !== confirmPassword
-                    .value) ? 'block' : 'none';
-            }
+    const form = document.getElementById('registerForm');
 
-            password.addEventListener('input', () => {
-                checkPasswordLength();
-                checkPasswordMatch();
-            });
+    function checkPassword() {
+        const value = password.value;
 
-            confirmPassword.addEventListener('input', checkPasswordMatch);
+        // length check
+        passwordFeedback.style.display = value.length < 8 ? 'block' : 'none';
 
-            form.addEventListener('submit', function(e) {
-                if (password.value.length < 8 || password.value !== confirmPassword.value) {
-                    e.preventDefault();
-                    checkPasswordLength();
-                    checkPasswordMatch();
-                }
-            });
+        // uppercase check
+        const hasUppercase = /[A-Z]/.test(value);
+        uppercaseFeedback.style.display = hasUppercase ? 'none' : 'block';
 
-            window.togglePassword = function(inputId, iconId) {
-                const input = document.getElementById(inputId);
-                const icon = document.getElementById(iconId);
-                const isPassword = input.type === 'password';
-                input.type = isPassword ? 'text' : 'password';
-                icon.classList.toggle('ri-eye-off-line');
-                icon.classList.toggle('ri-eye-line');
-            };
-        });
-    </script>
+        // special character check
+        const hasSpecial = /[\W_]/.test(value);
+        specialFeedback.style.display = hasSpecial ? 'none' : 'block';
+    }
+
+    function checkPasswordMatch() {
+        confirmFeedback.style.display = (
+            confirmPassword.value && password.value !== confirmPassword.value
+        ) ? 'block' : 'none';
+    }
+
+    password.addEventListener('input', () => {
+        checkPassword();
+        checkPasswordMatch();
+    });
+
+    confirmPassword.addEventListener('input', checkPasswordMatch);
+
+    form.addEventListener('submit', function(e) {
+        const value = password.value;
+        const valid = value.length >= 8 && /[A-Z]/.test(value) && /[\W_]/.test(value);
+
+        if (!valid || password.value !== confirmPassword.value) {
+            e.preventDefault();
+            checkPassword();
+            checkPasswordMatch();
+        }
+    });
+
+    window.togglePassword = function(inputId, iconId) {
+        const input = document.getElementById(inputId);
+        const icon = document.getElementById(iconId);
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        icon.classList.toggle('ri-eye-off-line');
+        icon.classList.toggle('ri-eye-line');
+    };
+});
+</script>
 @endsection
