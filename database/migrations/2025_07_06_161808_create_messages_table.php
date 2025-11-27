@@ -21,6 +21,7 @@ return new class extends Migration
       $table->string('receiver_role')->nullable();
 
       $table->text('message_text')->nullable();
+      $table->string('image_url')->nullable();
       $table->dateTime('sent_at')->default(DB::raw('CURRENT_TIMESTAMP'));
       $table->boolean('is_read')->default(false);
 

@@ -111,10 +111,10 @@
                                                     {{-- Action buttons with data-id --}}
                                                     <button class="dropdown-item text-success btn-approve"
                                                         data-id="{{ $vendor->vendor_id }}"><i class="bx bx-check me-1"></i>
-                                                        Approve Reg.</button>
+                                                        Approve Registration.</button>
                                                     <button class="dropdown-item text-danger btn-reject"
                                                         data-id="{{ $vendor->vendor_id }}"><i class="bx bx-x me-1"></i>
-                                                        Reject Reg.</button>
+                                                        Reject Registration.</button>
                                                 @endif
 
                                                 <div class="dropdown-divider"></div>

@@ -10,6 +10,8 @@ use Illuminate\Auth\Events\Verified;
 
 use App\Http\Controllers\Notifications\NotificationController;
 
+use App\Http\Controllers\vendor\PreorderOrderController as VendorPreorderController;
+
 // === Models ===
 use App\Models\User;
 
@@ -227,10 +229,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
       Route::get('/orders', [PendingOrderController::class, 'getAllOrders'])->name('orders.index');
       Route::get('/orders/status/{status}', [PendingOrderController::class, 'getOrdersByStatus'])->name('orders.by-status');
       Route::delete('/orders/{order}', [PendingOrderController::class, 'destroy'])->name('orders.destroy');
+      Route::post('/orders/{order_id}/upload-proof', [PendingOrderController::class, 'uploadProof'])
+     ->name('orders.uploadProof');
 
       // Preorders
       Route::get('/vendor/orders/preorder', [PreorderOrderController::class, 'preorderOrders'])->name('vendor.orders-preorder');
       Route::patch('/vendor/preorders/{id}/status', [PreorderOrderController::class, 'updateStatus'])->name('preorders.updateStatus');
+      Route::post('/vendor/preorders/{id}/upload-proof', [VendorPreorderController::class, 'uploadPreorderProof'])
+     ->name('preorders.uploadProof');
 
       // Schedule Management
       Route::get('/vendor/schedule', [VendorScheduleController::class, 'index'])->name('vendor.schedule.index');

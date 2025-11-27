@@ -28,7 +28,12 @@ class Order extends Model
     'updated_at'    => 'datetime',
   ];
 
-
+public function preOrder()
+    {
+        // pre_orders.order_id -> orders.order_id
+        return $this->hasOne(PreOrder::class, 'order_id', 'order_id');
+    }
+    
   public function getRouteKeyName()
   {
     return 'order_id';

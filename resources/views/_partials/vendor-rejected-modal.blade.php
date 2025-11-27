@@ -25,11 +25,19 @@
 
 <script>
     window.addEventListener('DOMContentLoaded', () => {
-        const modal = new bootstrap.Modal(document.getElementById('vendorRejectedModal'));
-        modal.show();
+        if (!sessionStorage.getItem('vendorRejectedSeen')) {
+            
+            const modal = new bootstrap.Modal(document.getElementById('vendorRejectedModal'));
+            modal.show();
 
-        document.getElementById('vendorRejectedConfirmBtn').addEventListener('click', () => {
-            window.location.href = "{{ route('customer.dashboard') }}";
-        });
+            sessionStorage.setItem('vendorRejectedSeen', 'true');
+        }
+        
+        const confirmBtn = document.getElementById('vendorRejectedConfirmBtn');
+        if(confirmBtn){
+            confirmBtn.addEventListener('click', () => {
+                window.location.href = "{{ route('customer.dashboard') }}";
+            });
+        }
     });
 </script>

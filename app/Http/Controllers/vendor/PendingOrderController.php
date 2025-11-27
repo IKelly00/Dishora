@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Log, DB};
 use Carbon\Carbon;
 use App\Services\NotificationService;
+use App\Models\BusinessDetail;
 
 class PendingOrderController extends Controller
 {
@@ -168,6 +169,9 @@ class PendingOrderController extends Controller
         'amount_due' => max(0, $orderTotal - $amountPaid),
 
         'receipt_url' => null,
+
+        'proof_of_delivery' => $order->proof_of_delivery,
+
         'notes' => $mappedItems->pluck('note')->filter()->join("\n") ?: null,
         'delivery_date' => $order->delivery_date ?? null,
         'delivery_time' => $order->delivery_time ?? null,
@@ -191,6 +195,36 @@ class PendingOrderController extends Controller
 
     return view('content.vendor.vendor-pending-order', $viewData);
   }
+
+  // Add this inside your class OrderController extends Controller { ... }
+
+public function uploadProof(Request $request, $order_id)
+{
+    // 1. Validate
+    $request->validate([
+        'proof_of_delivery' => 'required|image|max:5120', // Max 5MB
+    ]);
+
+    // 2. Handle File Upload
+    if ($request->hasFile('proof_of_delivery')) {
+        $file = $request->file('proof_of_delivery');
+        
+        // Generate unique filename
+        $filename = 'proof_' . $order_id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        
+        // Save file to 'public/proofs' folder
+        $file->move(public_path('proofs'), $filename);
+
+        // 3. Update Database
+        // We use 'where' explicitly because your PK is 'order_id'
+        Order::where('order_id', $order_id)
+            ->update(['proof_of_delivery' => $filename]);
+            
+        return back()->with('success', 'Proof uploaded successfully.');
+    }
+
+    return back()->with('error', 'Upload failed.');
+}
 
   /**
    * Update order item status.
@@ -259,9 +293,13 @@ class PendingOrderController extends Controller
         }
 
         $actorUserId = Auth::id();
-
+        
         // [START] SAFE NOTIFICATION
         try {
+          $businessId = $order->business_id ?? $activeBusinessId ?? null;
+          $businessInfo = $businessId ? BusinessDetail::where('business_id', $businessId)->first() : null;
+          $businessName = $businessInfo ? $businessInfo->business_name : 'the store';
+
           $notify->createNotification([
             'user_id' => $order->user_id,
             'actor_user_id' => $actorUserId,
@@ -273,7 +311,7 @@ class PendingOrderController extends Controller
             'is_global' => false,
             'payload' => [
               'order_id' => $order->order_id,
-              'title' => "Your order with Id #{$order->order_id} status has changed to {$newStatus}",
+              'title' => "Your order from {$businessName} status has changed to {$newStatus}",
               'excerpt' => "Status: {$newStatus}",
               'status' => $newStatus,
               'url' => "/customer/orders",
@@ -356,7 +394,13 @@ class PendingOrderController extends Controller
         // [START] SAFE NOTIFICATION
         try {
           // Note: $order is not defined here, we have $orderOfItem
+
           if ($orderOfItem) {
+
+          $businessId = $order->business_id ?? $activeBusinessId ?? null;
+          $businessInfo = $businessId ? BusinessDetail::where('business_id', $businessId)->first() : null;
+          $businessName = $businessInfo ? $businessInfo->business_name : 'the store';
+
             $notify->createNotification([
               'user_id' => $orderOfItem->user_id, // Use the parent order
               'actor_user_id' => $actorUserId,
@@ -368,7 +412,7 @@ class PendingOrderController extends Controller
               'is_global' => false,
               'payload' => [
                 'order_id' => $orderOfItem->order_id,
-                'title' => "Your order with Id #{$orderOfItem->order_id} status has changed to {$newStatus}",
+                'title' => "Your order from {$businessName} status has changed to {$newStatus}",
                 'excerpt' => "Status: {$newStatus}",
                 'status' => $newStatus,
                 'url' => "/customer/orders",

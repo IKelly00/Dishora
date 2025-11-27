@@ -60,94 +60,161 @@
         @endif
 
         <div class="table-responsive">
-            <table class="table align-middle">
-                <thead>
-                    <tr>
-                        <th>Customer Name</th>
-                        <th>Order Date</th>
-                        <th>Payment</th>
-                        <th>Preorder Status</th>
-                        <th>Status</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($preorderOrders as $row)
-                        <tr>
-                            <td>{{ $row->customer_name }}</td>
-                            <td>{{ \Carbon\Carbon::parse($row->order_date)->format('d/m/Y - h:i A') }}</td>
-                            <td>{{ $row->payment_method }}</td>
-                            <td>
-                                @php
-                                    $statusLabel = trim($row->preorder_status ?? ($row->status ?? 'Pending'));
-                                    $norm = strtolower($statusLabel);
-                                @endphp
-                                @php
-                                    $badgeClass = 'badge-pending';
-                                    if ($norm === 'pending') {
-                                        $badgeClass = 'badge-pending';
-                                    } elseif ($norm === 'preparing') {
-                                        $badgeClass = 'badge-preparing';
-                                    } elseif ($norm === 'for delivery' || $norm === 'for_delivery') {
-                                        $badgeClass = 'badge-delivery';
-                                    } elseif ($norm === 'completed') {
-                                        $badgeClass = 'badge-completed';
-                                    } elseif ($norm === 'cancelled' || $norm === 'canceled') {
-                                        $badgeClass = 'badge-cancelled';
-                                    } elseif (str_contains($norm, 'paid')) {
-                                        $badgeClass = 'badge-completed';
-                                    }
-                                @endphp
-                                <span class="status-badge {{ $badgeClass }}">{{ $statusLabel }}</span>
-                            </td>
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th>Customer Name</th>
+                <th>Order Date</th>
+                <th>Payment</th>
+                <th>Preorder Status</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($preorderOrders as $row)
+                <tr>
+                    <!-- 1. Customer Name -->
+                    <td>{{ $row->customer_name }}</td>
+                    
+                    <!-- 2. Order Date -->
+                    <td>{{ \Carbon\Carbon::parse($row->order_date)->format('d/m/Y - h:i A') }}</td>
+                    
+                    <!-- 3. Payment Method -->
+                    <td>{{ $row->payment_method }}</td>
 
-                            <td style="min-width:220px;">
-                                <form action="{{ route('preorders.updateStatus', $row->id) }}" method="POST"
-                                    class="status-form d-inline-block me-2">
-                                    @csrf @method('PATCH')
-                                    <select name="status" class="form-select form-select-sm status-dropdown"
-                                        data-current="{{ $row->status }}">
-                                        @php $statuses = ['Pending','Preparing','For Delivery','Completed','Cancelled']; @endphp
-                                        @foreach ($statuses as $s)
-                                            <option value="{{ $s }}" @selected($row->status === $s)>
-                                                {{ $s }}</option>
-                                        @endforeach
-                                    </select>
-                                </form>
-                            </td>
+                    <!-- 4. Status Badge -->
+                    <td>
+                        @php
+                            $statusLabel = trim($row->preorder_status ?? ($row->status ?? 'Pending'));
+                            $norm = strtolower($statusLabel);
+                            $badgeClass = 'badge-pending';
 
-                            <td>
-                                @php
-                                    // JSON-encode row safely for attribute
-                                    $orderJsonAttr = json_encode(
-                                        $row,
-                                        JSON_HEX_APOS |
-                                            JSON_HEX_QUOT |
-                                            JSON_HEX_TAG |
-                                            JSON_HEX_AMP |
-                                            JSON_UNESCAPED_SLASHES,
-                                    );
-                                @endphp
-                                <button type="button" class="btn btn-sm btn-upload btn-view-preorder"
-                                    data-order='{!! $orderJsonAttr !!}'>
-                                    <i class="fa fa-eye me-1"></i> View
-                                </button>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="text-center">
-                                @if (request('date_from') || request('date_to'))
-                                    No preorders found for the selected date range.
-                                @else
-                                    No preorders found.
-                                @endif
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
+                            if ($norm === 'pending') {
+                                $badgeClass = 'badge-pending';
+                            } elseif ($norm === 'preparing') {
+                                $badgeClass = 'badge-preparing';
+                            } elseif ($norm === 'for delivery' || $norm === 'for_delivery') {
+                                $badgeClass = 'badge-delivery';
+                            } elseif ($norm === 'completed') {
+                                $badgeClass = 'badge-completed';
+                            } elseif ($norm === 'cancelled' || $norm === 'canceled') {
+                                $badgeClass = 'badge-cancelled';
+                            } elseif (str_contains($norm, 'paid')) {
+                                $badgeClass = 'badge-completed';
+                            }
+                        @endphp
+                        <span class="status-badge {{ $badgeClass }}">{{ $statusLabel }}</span>
+                    </td>
+
+                    <!-- 5. Status Update Dropdown -->
+                    <td style="min-width:220px;">
+                        <!-- FIXED: Changed $row->pre_order_id to $row->id -->
+                        <form action="{{ route('preorders.updateStatus', $row->id) }}" method="POST"
+                            class="status-form d-inline-block me-2">
+                            @csrf @method('PATCH')
+                            <select name="status" class="form-select form-select-sm status-dropdown"
+                                data-current="{{ $row->status }}">
+                                @php $statuses = ['Pending','Preparing','For Delivery','Completed','Cancelled']; @endphp
+                                @foreach ($statuses as $s)
+                                    <option value="{{ $s }}" @selected($row->status === $s)>
+                                        {{ $s }}</option>
+                                @endforeach
+                            </select>
+                        </form>
+                    </td>
+
+                    <!-- 6. ACTIONS COLUMN (With Upload Logic) -->
+                    <td>
+                        <!-- A. VIEW PROOF BUTTON (Green) -->
+                        <!-- Visible if proof_of_delivery exists in the database row -->
+                        @if(!empty($row->proof_of_delivery))
+                            <a href="{{ asset('proofs/' . $row->proof_of_delivery) }}" 
+                               target="_blank" 
+                               class="btn btn-sm btn-success mb-0 me-1" 
+                               title="View Uploaded Proof">
+                                <i class="fa fa-image"></i>
+                            </a>
+                        @endif
+
+                        <!-- B. UPLOAD BUTTON (Gray) -->
+                        <!-- Logic: Check if status is 'For Delivery'. If not, add 'd-none' class. -->
+                        @php
+                            $isForDelivery = strtolower(trim($row->status)) === 'for delivery';
+                        @endphp
+
+                        <!-- FIXED: Changed $row->pre_order_id to $row->id -->
+                        <form action="{{ route('preorders.uploadProof', $row->id) }}" 
+                              method="POST" 
+                              enctype="multipart/form-data" 
+                              class="d-inline-block me-1 upload-proof-form {{ $isForDelivery ? '' : 'd-none' }}">
+                            @csrf
+                            <label class="btn btn-sm btn-outline-secondary mb-0" style="cursor: pointer;" 
+                                   title="{{ !empty($row->proof_of_delivery) ? 'Change Proof' : 'Upload Proof' }}">
+                                <i class="fa fa-upload"></i>
+                                <input type="file" name="proof_of_delivery" style="display: none;" onchange="this.form.submit()">
+                            </label>
+                        </form>
+
+                        <!-- C. VIEW DETAILS BUTTON -->
+                        @php
+                            $orderJsonAttr = json_encode(
+                                $row,
+                                JSON_HEX_APOS |
+                                    JSON_HEX_QUOT |
+                                    JSON_HEX_TAG |
+                                    JSON_HEX_AMP |
+                                    JSON_UNESCAPED_SLASHES,
+                            );
+                        @endphp
+                        <button type="button" class="btn btn-sm btn-upload btn-view-preorder"
+                            data-order='{!! $orderJsonAttr !!}'>
+                            <i class="fa fa-eye me-1"></i> View
+                        </button>
+                    </td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="6" class="text-center">
+                        @if (request('date_from') || request('date_to'))
+                            No preorders found for the selected date range.
+                        @else
+                            No preorders found.
+                        @endif
+                    </td>
+                </tr>
+            @endforelse
+        </tbody>
+    </table>
+</div>
+
+<!-- JAVASCRIPT FOR REAL-TIME BUTTON TOGGLE -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Select all status dropdowns
+        const statusDropdowns = document.querySelectorAll('.status-dropdown');
+
+        statusDropdowns.forEach(dropdown => {
+            dropdown.addEventListener('change', function() {
+                // 1. Get selected status
+                const selectedStatus = this.value.trim().toLowerCase();
+                
+                // 2. Find the row and the upload form
+                const row = this.closest('tr');
+                const uploadForm = row.querySelector('.upload-proof-form');
+
+                // 3. Show/Hide logic
+                if (uploadForm) {
+                    if (selectedStatus === 'for delivery') {
+                        uploadForm.classList.remove('d-none'); // Show
+                    } else {
+                        uploadForm.classList.add('d-none'); // Hide
+                    }
+                }
+            });
+        });
+    });
+</script>
     </div>
 
     <!-- PREORDER DETAIL MODAL -->
@@ -961,4 +1028,26 @@
 
         });
     </script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const statusDropdowns = document.querySelectorAll('.status-dropdown');
+
+        statusDropdowns.forEach(dropdown => {
+            dropdown.addEventListener('change', function() {
+                const selectedStatus = this.value.trim().toLowerCase();
+                const row = this.closest('tr');
+                const uploadForm = row.querySelector('.upload-proof-form');
+
+                if (uploadForm) {
+                    if (selectedStatus === 'for delivery') {
+                        uploadForm.classList.remove('d-none'); // Show
+                    } else {
+                        uploadForm.classList.add('d-none'); // Hide
+                    }
+                }
+            });
+        });
+    });
+</script>
 @endpush

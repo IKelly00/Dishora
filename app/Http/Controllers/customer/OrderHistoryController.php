@@ -26,6 +26,7 @@ class OrderHistoryController extends Controller
       'business',
       'items.product',
       'paymentDetails',
+      'preOrder',
     ])
       ->where('user_id', $user->user_id)
       ->whereDoesntHave('items', function ($q) {

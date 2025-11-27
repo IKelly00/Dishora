@@ -600,6 +600,9 @@ class CheckoutPreorderController extends Controller
       try {
         $notify = app(\App\Services\NotificationService::class);
 
+        $customer = User::where('user_id', $draft->user_id)->first();
+        $customerName = $customer ? $customer->fullname : 'Customer';
+
         // 1. Notify Vendor
         $order->load('business.vendor.user'); // Make sure relations are loaded
         if ($order->business && $order->business->vendor && $order->business->vendor->user) {
@@ -614,13 +617,16 @@ class CheckoutPreorderController extends Controller
             'recipient_role'  => 'vendor',
             'payload' => [
               'order_id'       => $order->order_id,
-              'title'          => "New Pre-Order #{$order->order_id} (COD)",
+              'title'          => "New Pre-Order from {$customerName} (COD)",
               'excerpt'        => "A customer placed a new pre-order (COD).",
               'status'         => $preorderStatus ?? 'Pending', // Use status from PreOrder logic
               'url'            => "/vendor/orders/preorder",
             ]
           ]);
         }
+
+        $businessInfo = BusinessDetail::where('business_id', $businessId)->first();
+        $businessName = $businessInfo ? $businessInfo->business_name : 'the store';
 
         // 2. Notify Customer
         $notify->createNotification([
@@ -632,7 +638,7 @@ class CheckoutPreorderController extends Controller
           'recipient_role'  => 'customer',
           'payload' => [
             'order_id'       => $order->order_id,
-            'title'          => "Your Pre-Order #{$order->order_id} is placed!",
+            'title'          => "Your Pre-Order from {$businessName} is placed!",
             'excerpt'        => "Thank you for your pre-order. It is pending confirmation.",
             'status'         => $preorderStatus ?? 'Pending',
             'url'            => "/customer/orders",
@@ -804,6 +810,9 @@ class CheckoutPreorderController extends Controller
         $notify = app(\App\Services\NotificationService::class);
         $preorderStatus = $preorder->preorder_status ?? 'Pending';
 
+        $customer = User::where('user_id', $draft->user_id)->first();
+        $customerName = $customer ? $customer->fullname : 'Customer';
+
         // 1. Notify Vendor
         $order->load('business.vendor.user');
         if ($order->business && $order->business->vendor && $order->business->vendor->user) {
@@ -818,13 +827,16 @@ class CheckoutPreorderController extends Controller
             'recipient_role'  => 'vendor',
             'payload' => [
               'order_id'       => $order->order_id,
-              'title'          => "New Pre-Order #{$order->order_id} (Paid)",
+              'title'          => "New Pre-Order from {$customerName} (Paid)",
               'excerpt'        => "A customer placed and paid for a new pre-order.",
               'status'         => $preorderStatus,
               'url'            => "/vendor/orders/preorder",
             ]
           ]);
         }
+
+        $businessInfo = BusinessDetail::where('business_id', $businessId)->first();
+        $businessName = $businessInfo ? $businessInfo->business_name : 'the store';
 
         // 2. Notify Customer
         if ($customerUser) {
@@ -837,7 +849,7 @@ class CheckoutPreorderController extends Controller
             'recipient_role'  => 'customer',
             'payload' => [
               'order_id'       => $order->order_id,
-              'title'          => "Your Pre-Order #{$order->order_id} is confirmed!",
+              'title'          => "Your Pre-Order from {$businessName} is confirmed!",
               'excerpt'        => "Thank you for your payment. Your pre-order is confirmed.",
               'status'         => $preorderStatus,
               'url'            => "/customer/orders",

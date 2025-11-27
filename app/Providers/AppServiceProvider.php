@@ -47,6 +47,22 @@ class AppServiceProvider extends ServiceProvider
       return new FilesystemAdapter($flysystem, $adapter, $config);
     });
 
+    // if ($this->app->environment('production')) {
+    //         URL::forceScheme('https');
+    // }
+
+    $currentHost = $this->app['request']->getHost();
+
+    if ($currentHost === 'dishora.shop' || str_contains($currentHost, 'dishora.shop')) {
+
+        URL::forceScheme('https');
+        $this->app['request']->server->set('HTTPS', 'on');
+        
+        // Optional: Force the Root URL to ensure links generated are correct
+        URL::forceRootUrl('https://dishora.shop');
+    } 
+
+    
     // Force the app URL and scheme so signed URLs are generated/validated against APP_URL
     // if (! empty(config('app.url'))) {
     //   // ensure the full root URL (scheme + host + port if any)
@@ -58,5 +74,5 @@ class AppServiceProvider extends ServiceProvider
     //     URL::forceScheme($scheme);
     //   }
     // }
+    }
   }
-}

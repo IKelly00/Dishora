@@ -234,6 +234,8 @@ class OrdersController extends Controller
             : '/vendor/orders/cart';
           // [END] DYNAMIC URL LOGIC
 
+          $customerName = $customerUser ? $customerUser->fullname : 'Customer';
+
           $notify->createNotification([
             'user_id'         => $vendorUser->user_id, // The Vendor (recipient)
             'actor_user_id'   => $customerUser->user_id, // The Customer (actor)
@@ -244,8 +246,8 @@ class OrdersController extends Controller
             'recipient_role'  => 'vendor',
             'payload' => [
               'order_id'       => $order->order_id,
-              'title'          => "Order with id #{$order->order_id} Cancelled",
-              'excerpt'        => "The customer has cancelled order with id #{$order->order_id}.",
+              'title'          => "Order with from {$customerName} has Cancelled",
+              'excerpt'        => "The customer has cancelled the order",
               'status'         => 'Cancelled',
               'url'            => $vendorUrl,
             ]

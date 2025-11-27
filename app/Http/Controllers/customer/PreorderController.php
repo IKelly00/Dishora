@@ -130,7 +130,7 @@ class PreorderController extends Controller
 
     // 2️⃣  Fetch the matching Product models (with their Business)
     $productIds = $sessionPreorders->pluck('product_id');
-    $products   = \App\Models\Product::with('business')
+    $products   = Product::with('business')
       ->whereIn('product_id', $productIds)
       ->get()
       ->keyBy('product_id');

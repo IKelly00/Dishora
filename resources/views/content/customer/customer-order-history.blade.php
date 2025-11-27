@@ -170,80 +170,97 @@
 
                                 <!-- Body -->
                                 <div class="card-body p-4">
-                                    <!-- Vendor & Delivery -->
-                                    <div class="row mb-3">
-                                        <div class="col-6">
-                                            <div class="text-muted small mb-1 fw-semibold">Vendor</div>
-                                            <div class="fw-semibold">{{ $order->business?->business_name ?? 'N/A' }}</div>
-                                        </div>
-                                        <div class="col-6 text-end">
-                                            <div class="text-muted small mb-1 fw-semibold">Delivery Date</div>
+    <!-- Vendor & Delivery -->
+    <div class="row mb-3">
+        <div class="col-6">
+            <div class="text-muted small mb-1 fw-semibold">Vendor</div>
+            <div class="fw-semibold">{{ $order->business?->business_name ?? 'N/A' }}</div>
+        </div>
+        <div class="col-6 text-end">
+            <div class="text-muted small mb-1 fw-semibold">Delivery Date</div>
 
-                                            @php
-                                                // Format delivery time to hours:minutes only (tries Carbon, falls back to removing seconds)
-                                                $formattedDeliveryTime = null;
-                                                if (!empty($order->delivery_time)) {
-                                                    try {
-                                                        $formattedDeliveryTime = \Carbon\Carbon::parse(
-                                                            $order->delivery_time,
-                                                        )->format('g:i A'); // 12-hour with AM/PM
-                                                    } catch (\Exception $e) {
-                                                        // fallback: remove trailing seconds if present (e.g. "08:30:00" -> "08:30")
-                                                        $formattedDeliveryTime = preg_replace(
-                                                            '/:(\d{2})(\s*[APMapm\.]*)$/',
-                                                            '$2',
-                                                            trim($order->delivery_time),
-                                                        );
-                                                        $formattedDeliveryTime = trim($formattedDeliveryTime);
-                                                    }
-                                                }
-                                            @endphp
-                                            <div class="fw-semibold">
-                                                {{ \Carbon\Carbon::parse($order->delivery_date)->format('M d, Y') }}{{ $formattedDeliveryTime ? ', ' . $formattedDeliveryTime : '' }}
-                                            </div>
-                                        </div>
-                                    </div>
+            @php
+                // Format delivery time logic
+                $formattedDeliveryTime = null;
+                if (!empty($order->delivery_time)) {
+                    try {
+                        $formattedDeliveryTime = \Carbon\Carbon::parse($order->delivery_time)->format('g:i A');
+                    } catch (\Exception $e) {
+                        $formattedDeliveryTime = preg_replace(
+                            '/:(\d{2})(\s*[APMapm\.]*)$/',
+                            '$2',
+                            trim($order->delivery_time),
+                        );
+                        $formattedDeliveryTime = trim($formattedDeliveryTime);
+                    }
+                }
+            @endphp
+            <div class="fw-semibold">
+                {{ \Carbon\Carbon::parse($order->delivery_date)->format('M d, Y') }}{{ $formattedDeliveryTime ? ', ' . $formattedDeliveryTime : '' }}
+            </div>
+        </div>
+    </div>
 
-                                    <!-- Items -->
-                                    <h6 class="fw-bold mb-3">Items</h6>
-                                    <div class="table-responsive mb-4">
-                                        <table class="table table-borderless align-middle mb-0">
-                                            <thead class="bg-light">
-                                                <tr>
-                                                    <th class="px-3 py-2">Product</th>
-                                                    <th class="text-center px-3 py-2" style="width:80px">Qty</th>
-                                                    <th class="text-end px-3 py-2" style="width:120px">Price</th>
-                                                    <th class="text-end px-3 py-2" style="width:130px">Subtotal</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach ($order->items as $item)
-                                                    <tr>
-                                                        <td class="px-3 py-3">
-                                                            <div class="fw-semibold">{{ $item->product_name }}</div>
-                                                        </td>
-                                                        <td class="text-center px-3 py-3">{{ $item->quantity }}</td>
-                                                        <td class="text-end px-3 py-3">
-                                                            ₱{{ number_format($item->price_at_order_time, 2) }}</td>
-                                                        <td class="text-end px-3 py-3 fw-bold">
-                                                            ₱{{ number_format($item->quantity * $item->price_at_order_time, 2) }}
-                                                        </td>
-                                                    </tr>
-                                                @endforeach
-                                            </tbody>
-                                        </table>
-                                    </div>
+    <!-- Items -->
+    <h6 class="fw-bold mb-3">Items</h6>
+    <div class="table-responsive mb-4">
+        <table class="table table-borderless align-middle mb-0">
+            <thead class="bg-light">
+                <tr>
+                    <th class="px-3 py-2">Product</th>
+                    <th class="text-center px-3 py-2" style="width:80px">Qty</th>
+                    <th class="text-end px-3 py-2" style="width:120px">Price</th>
+                    <th class="text-end px-3 py-2" style="width:130px">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($order->items as $item)
+                    <tr>
+                        <td class="px-3 py-3">
+                            <div class="fw-semibold">{{ $item->product_name }}</div>
+                        </td>
+                        <td class="text-center px-3 py-3">{{ $item->quantity }}</td>
+                        <td class="text-end px-3 py-3">
+                            ₱{{ number_format($item->price_at_order_time, 2) }}</td>
+                        <td class="text-end px-3 py-3 fw-bold">
+                            ₱{{ number_format($item->quantity * $item->price_at_order_time, 2) }}
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
 
-                                    <!-- Total -->
-                                    <div class="border-top pt-3 d-flex justify-content-end">
-                                        <div class="text-end">
-                                            <p class="mb-1 text-muted small">Total:</p>
-                                            <h5 class="fw-bold text-primary mb-0">
-                                                ₱{{ number_format($order->total, 2) }}
-                                            </h5>
-                                        </div>
-                                    </div>
-                                </div>
+    <!-- FOOTER SECTION: Proof Button (Left) & Total (Right) -->
+    <!-- Changed 'justify-content-end' to 'justify-content-between' to separate Button and Total -->
+    <div class="border-top pt-3 d-flex justify-content-between align-items-center">
+
+    @php
+        // Prefer proof from orders; if empty, fall back to related pre_orders row
+        $proof = $order->proof_of_delivery ?? $order->preOrder?->proof_of_delivery;
+    @endphp
+
+    <!-- 1. PROOF BUTTON (Visible if any proof exists) -->
+    <div>
+        @if (!empty($proof))
+            <a href="{{ asset('proofs/' . $proof) }}"
+               target="_blank"
+               class="btn btn-sm btn-success shadow-sm"
+               title="View Proof of Delivery">
+                <i class="fa fa-image me-1"></i> View Proof
+            </a>
+        @endif
+    </div>
+
+    <!-- 2. TOTAL PRICE -->
+    <div class="text-end">
+        <p class="mb-1 text-muted small">Total:</p>
+        <h5 class="fw-bold text-primary mb-0">
+            ₱{{ number_format($order->total, 2) }}
+        </h5>
+    </div>
+</div>  
+</div>
                             </div>
                         </div>
                     @endforeach

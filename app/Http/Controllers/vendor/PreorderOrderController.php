@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\vendor;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Order, Vendor, OrderItem, Preorder, PaymentDetail};
+use App\Models\{Order, Vendor, OrderItem, Preorder, PaymentDetail, BusinessDetail};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Log};
 use Carbon\Carbon;
@@ -187,6 +187,7 @@ class PreorderOrderController extends Controller
         'delivery_time' => $pre->delivery_time ?? $order->delivery_time ?? null,
         'food_name' => $foodName,
         'food_image' => $foodImage,
+        'proof_of_delivery' => $pre->proof_of_delivery, 
       ];
     });
 
@@ -240,6 +241,10 @@ class PreorderOrderController extends Controller
               $notify = app(\App\Services\NotificationService::class);
               $actorUserId = Auth::id();
               $newStatus = $request->status;
+              
+              $businessId = $parentOrder->business_id ?? null;
+              $businessInfo = $businessId ? BusinessDetail::where('business_id', $businessId)->first() : null;
+              $businessName = $businessInfo ? $businessInfo->business_name : '';
 
               $notify->createNotification([
                 'user_id'         => $parentOrder->user_id,   // The Customer
@@ -251,7 +256,7 @@ class PreorderOrderController extends Controller
                 'recipient_role'  => 'customer',
                 'payload' => [
                   'order_id'       => $parentOrder->order_id,
-                  'title'          => "Your Pre-Order #{$parentOrder->order_id} status has changed",
+                  'title'          => "Your Pre-Order from {$businessName} status has changed",
                   'excerpt'        => "An item in your order is now: {$newStatus}.",
                   'status'         => $newStatus,
                   'url'            => "/customer/preorder"
@@ -334,34 +339,49 @@ class PreorderOrderController extends Controller
 
       // [START] SAFE NOTIFICATION
       try {
-        $notify = app(\App\Services\NotificationService::class);
-        $actorUserId = Auth::id(); // The Vendor User
-        $newStatus = $request->status;
+    $notify = app(\App\Services\NotificationService::class);
+    $actorUserId = Auth::id(); // The Vendor User
+    $newStatus = $request->status;
 
-        // $order is already defined in this block
-        $notify->createNotification([
-          'user_id'         => $order->user_id,        // The Customer (recipient)
-          'actor_user_id'   => $actorUserId,           // The Vendor User (actor)
-          'event_type'      => 'PREORDER_STATUS_CHANGED',
-          'reference_table' => 'orders, preorder',
-          'reference_id'    => $order->order_id,
-          'business_id'     => $order->business_id,
-          'recipient_role'  => 'customer',
-          'payload' => [
+    // --- THE FIX IS HERE ---
+    // We look for the business using TWO methods:
+    // 1. Does the order have a business_id? Use that.
+    // 2. If not, find the business owned by the logged-in Vendor ($actorUserId).
+    $businessInfo = BusinessDetail::where('business_id', $order->business_id)
+                                  ->orWhere('vendor_id', $actorUserId)
+                                  ->first();
+
+    // Get name or fallback
+    $businessName = $businessInfo ? $businessInfo->business_name : 'the store';
+    // -----------------------
+
+    $notify->createNotification([
+        'user_id'         => $order->user_id,        // The Customer (recipient)
+        'actor_user_id'   => $actorUserId,           // The Vendor User (actor)
+        'event_type'      => 'PREORDER_STATUS_CHANGED',
+        'reference_table' => 'orders, preorder',
+        'reference_id'    => $order->order_id,
+        'business_id'     => $order->business_id,
+        'recipient_role'  => 'customer',
+        'payload' => [
             'order_id'       => $order->order_id,
-            'title'          => "Your Pre-Order #{$order->order_id} status has changed",
+            
+            // Now uses the fetched name
+            'title'          => "Your Pre-Order from {$businessName} status has changed",
+            
             'excerpt'        => "Your pre-order status is now: {$newStatus}.",
             'status'         => $newStatus,
-            'url'            => "/customer/preorder" // Or a specific order URL
-          ]
-        ]);
-      } catch (\Throwable $e) {
-        // Do NOT re-throw. Log the error and continue.
-        Log::error('Failed to send pre-order status notification', [
-          'order_id' => $order->order_id,
-          'error' => $e->getMessage()
-        ]);
-      }
+            'url'            => "/customer/preorder"
+        ]
+    ]);
+
+} catch (\Throwable $e) {
+    // Log error to storage/logs/laravel.log
+      Log::error('Failed to send pre-order status notification', [
+        'order_id' => $order->order_id,
+        'error' => $e->getMessage()
+    ]);
+}
       // [END] SAFE NOTIFICATION
 
       DB::commit();
@@ -413,4 +433,26 @@ class PreorderOrderController extends Controller
 
     return view('orders.by-status', compact('orders', 'status'));
   }
+
+  public function uploadPreorderProof(\Illuminate\Http\Request $request, $id)
+{
+    $request->validate([
+        'proof_of_delivery' => 'required|image|max:5120',
+    ]);
+
+    if ($request->hasFile('proof_of_delivery')) {
+        $file = $request->file('proof_of_delivery');
+        $filename = 'preorder_' . $id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $file->move(public_path('proofs'), $filename);
+
+        // ➤ CRITICAL FIX: Use 'pre_order_id' to match your table screenshot
+        DB::table('pre_orders')
+            ->where('pre_order_id', $id) 
+            ->update(['proof_of_delivery' => $filename]);
+
+        return back()->with('success', 'Proof uploaded successfully.');
+    }
+
+    return back()->with('error', 'Upload failed.');
+}
 }

@@ -13,6 +13,7 @@ return new class extends Migration {
       $table->string('provider', 50);
       $table->string('token', 500);
       $table->string('platform', 50)->nullable();
+      $table->string('sns_endpoint_arn')->nullable();
       $table->timestamp('last_seen')->nullable();
       $table->boolean('is_active')->default(true);
       $table->timestamp('created_at')->nullable()->useCurrent();

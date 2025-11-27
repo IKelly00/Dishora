@@ -514,6 +514,9 @@ class CheckoutCartController extends Controller
       // Send notifications
       $notify = app(NotificationService::class);
 
+      $customer = User::where('user_id', $draft->user_id)->first();
+      $customerName = $customer ? $customer->fullname : 'Customer';
+
       // 1. Notify vendor (for this business)
       $notify->createNotification([
         'user_id' => $vendor_userid,   // or vendor user_id if vendors have separate accounts
@@ -525,12 +528,15 @@ class CheckoutCartController extends Controller
         'recipient_role' => 'vendor',
         'payload' => [
           'order_id' => $order->order_id,
-          'title' => "New Order with Id #{$order->order_id}",
+          'title' => "New Order from {$customerName}",
           'excerpt' => 'A customer placed a new order.',
           'status' => 'Pending',
           'url' => "/vendor/orders/cart",
         ],
       ]);
+
+      $businessInfo = BusinessDetail::where('business_id', $businessId)->first();
+      $businessName = $businessInfo ? $businessInfo->business_name : 'the store';
 
       // 2. Notify customer
       $notify->createNotification([
@@ -542,7 +548,7 @@ class CheckoutCartController extends Controller
         'recipient_role' => 'customer',
         'payload' => [
           'order_id' => $order->order_id,
-          'title' => "Your Order with Id #{$order->order_id} has been placed!",
+          'title' => "Your Order from {$businessName} has been placed!",
           'excerpt' => 'Thank you for your order.',
           'status' => 'Pending',
           'url' => "/customer/orders",
@@ -710,6 +716,9 @@ class CheckoutCartController extends Controller
       // Send notifications
       $notify = app(NotificationService::class);
 
+      $customer = User::where('user_id', $draft->user_id)->first();
+      $customerName = $customer ? $customer->fullName : 'Customer';
+
       // 1. Notify vendor (for this business)
       $notify->createNotification([
         'user_id' => $vendor_userid,   // or vendor user_id if vendors have separate accounts
@@ -721,12 +730,15 @@ class CheckoutCartController extends Controller
         'recipient_role' => 'vendor',
         'payload' => [
           'order_id' => $order->order_id,
-          'title' => "New Order #{$order->order_id}",
+          'title' => "New Order from {$customerName}",
           'excerpt' => 'A customer placed a new order.',
           'status' => 'Pending',
           'url' => "/vendor/orders/cart",
         ],
       ]);
+
+      $businessInfo = BusinessDetail::where('business_id', $businessId)->first();
+      $businessName = $businessInfo ? $businessInfo->business_name : 'the store';
 
       // 2. Notify customer
       $notify->createNotification([
@@ -738,7 +750,7 @@ class CheckoutCartController extends Controller
         'recipient_role' => 'customer',
         'payload' => [
           'order_id' => $order->order_id,
-          'title' => "Your Order #{$order->order_id} has been placed!",
+          'title' => "Your Order from {$businessName} has been placed!",
           'excerpt' => 'Thank you for your order.',
           'status' => 'Pending',
           'url' => "/customer/orders",
